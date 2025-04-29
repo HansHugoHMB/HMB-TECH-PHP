@@ -1,0 +1,14 @@
+# Utilisation de l'image PHP officielle
+FROM php:8.1-cli
+
+# Répertoire de travail
+WORKDIR /app
+
+# Copie du code dans le container
+COPY . /app
+
+# Exposition du port
+EXPOSE 10000
+
+# Démarre PHP avec un serveur local
+CMD ["php", "-S", "0.0.0.0:10000"]
