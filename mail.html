@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulaire d'envoi d'email</title>
+</head>
+<body>
+    <h2>Envoyer un Email via PHP</h2>
+    <form action="send_email.php" method="POST">
+        <label for="sender_email">Ton Email:</label>
+        <input type="email" id="sender_email" name="sender_email" required placeholder="Ton email"><br><br>
+
+        <label for="password">Mot de passe :</label>
+        <input type="password" id="password" name="password" required placeholder="Ton mot de passe"><br><br>
+
+        <label for="recipient_email">Email du destinataire :</label>
+        <input type="email" id="recipient_email" name="recipient_email" required placeholder="Destinataire"><br><br>
+
+        <label for="subject">Sujet :</label>
+        <input type="text" id="subject" name="subject" required placeholder="Sujet de l'email"><br><br>
+
+        <label for="message">Message :</label><br>
+        <textarea id="message" name="message" rows="5" required placeholder="Ton message ici"></textarea><br><br>
+
+        <button type="submit">Envoyer l'Email</button>
+    </form>
+</body>
+</html>
