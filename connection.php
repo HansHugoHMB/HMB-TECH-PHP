@@ -1,12 +1,12 @@
 <?php
 header("Content-Type: text/html; charset=UTF-8");
+session_start();
 
-// --- Connexion DB ---
+// Connexion DB
 $host = 'localhost';
-$dbname = 'nom_de_ta_db'; // à modifier
+$dbname = 'nom_de_ta_db'; // Remplace par ta DB
 $user = 'root';
 $pass = '';
-session_start();
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname", $user, $pass);
@@ -15,7 +15,7 @@ try {
     die("Erreur DB : " . $e->getMessage());
 }
 
-// --- Traitement form ---
+// Traitement formulaire
 $message = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
@@ -27,9 +27,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $stmt = $pdo->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
         if ($stmt->execute([$username, $hash])) {
-            $message = "Inscription réussie.";
+            $message = "Inscription réussie. Veuillez vous connecter.";
         } else {
-            $message = "Erreur d'inscription.";
+            $message = "Nom déjà utilisé.";
         }
     }
 
@@ -40,30 +40,29 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if ($user && password_verify($password, $user['password'])) {
             $_SESSION['user'] = $username;
-            $message = "Connexion réussie.";
         } else {
-            $message = "Nom d'utilisateur ou mot de passe incorrect.";
+            $message = "Identifiants incorrects.";
         }
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Connexion</title>
+    <title>Authentification</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
         body {
             margin: 0;
             background-color: #0D1C40;
-            font-family: 'Arial', sans-serif;
+            font-family: Arial, sans-serif;
+            color: white;
         }
         #popup {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -71,25 +70,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
         .form-box {
             background: white;
-            border-radius: 10px;
+            color: #0D1C40;
             padding: 20px;
+            border-radius: 8px;
             width: 90%;
             max-width: 300px;
-            box-shadow: 0 0 15px #000;
+            box-shadow: 0 0 10px black;
         }
         .form-box h3 {
-            margin: 0;
             text-align: center;
-            color: #0D1C40;
+            margin-top: 0;
         }
         .form-box input, .form-box button {
             width: 100%;
             margin: 10px 0;
             padding: 10px;
-            font-size: 16px;
+            font-size: 15px;
         }
         .form-box button {
-            background: #0D1C40;
+            background-color: #0D1C40;
             color: white;
             border: none;
             cursor: pointer;
@@ -97,12 +96,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         .message {
             text-align: center;
             font-size: 14px;
-            margin-top: 5px;
             color: red;
+        }
+        #main-content {
+            padding: 20px;
+            display: none;
         }
     </style>
 </head>
 <body>
+
 <?php if (!isset($_SESSION['user'])): ?>
 <div id="popup">
     <div class="form-box">
@@ -118,9 +121,35 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 <?php else: ?>
 <script>
-    document.body.innerHTML = ""; // efface tout
-    alert("Bienvenue <?= $_SESSION['user'] ?> !");
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('popup')?.remove();
+        document.getElementById('main-content').style.display = 'block';
+    });
 </script>
 <?php endif; ?>
+
+<!-- Contenu principal (visible après connexion) -->
+<div id="main-content">
+    <h1>Bienvenue, <?= htmlspecialchars($_SESSION['user']) ?> !</h1>
+    <p>Voici le contenu de ton site web sécurisé.</p>
+    <ul>
+        <li>Dashboard</li>
+        <li>Produits</li>
+        <li>Paramètres</li>
+    </ul>
+    <form method="POST">
+        <button name="action" value="logout">Se déconnecter</button>
+    </form>
+</div>
+
+<?php
+// Déconnexion
+if ($_POST['action'] ?? '' === 'logout') {
+    session_destroy();
+    header("Location: " . $_SERVER['PHP_SELF']);
+    exit;
+}
+?>
+
 </body>
 </html>
