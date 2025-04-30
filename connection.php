@@ -1,23 +1,25 @@
 <?php
 // Traitement du formulaire
-$message = '';
-$connecte = false;
+session_start(); 
 
-// Si le formulaire est soumis
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    // Identifiants valides (stockés directement dans le fichier PHP)
+    // Identifiants valides
     $valid_email = "test@exemple.com";
     $valid_password = "123456";
 
     // Vérification de l'email et du mot de passe
     if ($email === $valid_email && $password === $valid_password) {
-        $connecte = true;
-        $message = "Bienvenue, $email !";
+        $_SESSION['connecte'] = true;
+        $_SESSION['email'] = $email;
+        
+        echo json_encode(['success' => true, 'message' => 'Connexion réussie']);
+        exit;
     } else {
-        $message = "Adresse e-mail ou mot de passe incorrect.";
+        echo json_encode(['success' => false, 'message' => 'Identifiants incorrects']);
+        exit;
     }
 }
 ?>
@@ -29,28 +31,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <title>Connexion</title>
     <style>
         body {
-            background-color: #0D1C40;
-            color: white;
-            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            height: 100vh;
+            font-family: Arial, sans-serif;
         }
-
-        .btn-open {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            padding: 10px 15px;
-            background-color: #1E90FF;
-            border: none;
-            color: white;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
+        
         .modal {
-            display: none;
+            display: flex;
             position: fixed;
             z-index: 1000;
             left: 0;
@@ -67,90 +53,107 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             padding: 20px;
             border-radius: 10px;
             width: 300px;
+            color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
         }
 
         .modal-content h2 {
             text-align: center;
+            margin-top: 0;
         }
 
         .modal-content input,
         .modal-content button {
             width: 100%;
-            padding: 10px;
-            margin: 10px 0;
+            padding: 12px;
+            margin: 8px 0;
             border-radius: 5px;
             border: none;
+            box-sizing: border-box;
+        }
+
+        .modal-content input {
+            background-color: #333;
+            color: white;
         }
 
         .modal-content button {
             background-color: #1E90FF;
             color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        .modal-content button:hover {
+            background-color: #1570CD;
         }
 
         .message {
             text-align: center;
             margin-top: 15px;
-            color: yellow;
+            padding: 10px;
+            border-radius: 5px;
         }
 
-        .close {
-            text-align: right;
-            cursor: pointer;
-            color: red;
+        .message.error {
+            color: #ff4444;
+            background-color: rgba(255, 68, 68, 0.1);
         }
 
-        .content {
-            display: none;
-            text-align: center;
-            padding: 20px;
+        .message.success {
+            color: #00C851;
+            background-color: rgba(0, 200, 81, 0.1);
         }
     </style>
 </head>
 <body>
 
-<?php if ($connecte): ?>
-    <!-- Message de bienvenue ou contenu de la page après connexion -->
-    <div class="content">
-        <h2><?php echo $message; ?></h2>
-        <p>Voici votre contenu exclusif après la connexion !</p>
+<div class="modal" id="loginModal">
+    <div class="modal-content">
+        <h2>Connexion</h2>
+        <form id="loginForm" onsubmit="return handleLogin(event)">
+            <input type="email" name="email" placeholder="Adresse e-mail" required>
+            <input type="password" name="password" placeholder="Mot de passe" required>
+            <button type="submit">Se connecter</button>
+        </form>
+        <div id="message" class="message"></div>
     </div>
-<?php else: ?>
-    <!-- Interface de connexion -->
-    <button class="btn-open" onclick="document.getElementById('loginModal').style.display='flex'">
-        Connexion
-    </button>
-
-    <div class="modal" id="loginModal">
-        <div class="modal-content">
-            <div class="close" onclick="document.getElementById('loginModal').style.display='none'">X</div>
-            <h2>Connexion</h2>
-            <form method="POST" action="">
-                <input type="email" name="email" placeholder="Adresse e-mail" required>
-                <input type="password" name="password" placeholder="Mot de passe" required>
-                <button type="submit">Se connecter</button>
-            </form>
-            <?php if ($message && !$connecte): ?>
-                <div class="message"><?php echo $message; ?></div>
-            <?php endif; ?>
-        </div>
-    </div>
-<?php endif; ?>
+</div>
 
 <script>
-// Fermer le modal si on clique en dehors
-window.onclick = function(event) {
-    let modal = document.getElementById('loginModal');
-    if (event.target === modal) {
-        modal.style.display = "none";
-    }
+function handleLogin(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const messageDiv = document.getElementById('message');
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        messageDiv.textContent = data.message;
+        messageDiv.className = 'message ' + (data.success ? 'success' : 'error');
+        
+        if (data.success) {
+            setTimeout(() => {
+                window.location.reload(); // ou rediriger vers une autre page
+            }, 1500);
+        }
+    })
+    .catch(error => {
+        messageDiv.textContent = "Une erreur est survenue";
+        messageDiv.className = 'message error';
+    });
+
+    return false;
 }
 
-// Afficher le contenu après la connexion réussie
-<?php if ($connecte): ?>
-    document.querySelector('.content').style.display = 'block';
-    document.querySelector('.btn-open').style.display = 'none'; // Cacher le bouton de connexion
-    document.getElementById('loginModal').style.display = 'none'; // Fermer le modal
-<?php endif; ?>
+// Empêcher la fermeture du modal en cliquant en dehors
+document.getElementById('loginModal').addEventListener('click', function(event) {
+    event.stopPropagation();
+});
 </script>
 
 </body>
