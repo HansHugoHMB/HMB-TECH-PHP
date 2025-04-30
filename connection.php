@@ -1,136 +1,126 @@
 <?php
-// Traitement du formulaire
-$message = '';
-$connecte = false;
+header("Content-Type: text/html; charset=UTF-8");
+
+// --- Connexion DB ---
+$host = 'localhost';
+$dbname = 'nom_de_ta_db'; // à modifier
+$user = 'root';
+$pass = '';
+session_start();
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $user, $pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Erreur DB : " . $e->getMessage());
+}
+
+// --- Traitement form ---
+$message = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $email = $_POST['email'] ?? '';
+    $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
+    $action = $_POST['action'] ?? '';
 
-    $valid_email = "test@exemple.com";
-    $valid_password = "123456";
+    if ($action === 'register') {
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
+        if ($stmt->execute([$username, $hash])) {
+            $message = "Inscription réussie.";
+        } else {
+            $message = "Erreur d'inscription.";
+        }
+    }
 
-    if ($email === $valid_email && $password === $valid_password) {
-        $connecte = true;
-        $message = "Bienvenue, $email !";
-    } else {
-        $message = "Adresse e-mail ou mot de passe incorrect.";
+    if ($action === 'login') {
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+
+        if ($user && password_verify($password, $user['password'])) {
+            $_SESSION['user'] = $username;
+            $message = "Connexion réussie.";
+        } else {
+            $message = "Nom d'utilisateur ou mot de passe incorrect.";
+        }
     }
 }
 ?>
 
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
     <meta charset="UTF-8">
     <title>Connexion</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
         body {
-            background-color: #0D1C40;
-            color: white;
-            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            height: 100vh;
+            background-color: #0D1C40;
+            font-family: 'Arial', sans-serif;
         }
-
-        .btn-open {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            padding: 10px 15px;
-            background-color: #1E90FF;
-            border: none;
-            color: white;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
-        .modal {
-            display: none;
+        #popup {
             position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.6);
-            justify-content: center;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
             align-items: center;
+            justify-content: center;
+            z-index: 9999;
         }
-
-        .modal-content {
-            background-color: #222;
-            padding: 20px;
+        .form-box {
+            background: white;
             border-radius: 10px;
-            width: 300px;
+            padding: 20px;
+            width: 90%;
+            max-width: 300px;
+            box-shadow: 0 0 15px #000;
         }
-
-        .modal-content h2 {
+        .form-box h3 {
+            margin: 0;
             text-align: center;
+            color: #0D1C40;
         }
-
-        .modal-content input,
-        .modal-content button {
+        .form-box input, .form-box button {
             width: 100%;
-            padding: 10px;
             margin: 10px 0;
-            border-radius: 5px;
-            border: none;
+            padding: 10px;
+            font-size: 16px;
         }
-
-        .modal-content button {
-            background-color: #1E90FF;
+        .form-box button {
+            background: #0D1C40;
             color: white;
+            border: none;
+            cursor: pointer;
         }
-
         .message {
             text-align: center;
-            margin-top: 15px;
-            color: yellow;
-        }
-
-        .close {
-            text-align: right;
-            cursor: pointer;
+            font-size: 14px;
+            margin-top: 5px;
             color: red;
         }
     </style>
 </head>
 <body>
-
-<button class="btn-open" onclick="document.getElementById('loginModal').style.display='flex'">
-    Connexion
-</button>
-
-<?php if ($connecte): ?>
-    <div class="message"><?php echo $message; ?></div>
-<?php endif; ?>
-
-<div class="modal" id="loginModal">
-    <div class="modal-content">
-        <div class="close" onclick="document.getElementById('loginModal').style.display='none'">X</div>
-        <h2>Connexion</h2>
-        <form method="POST" action="">
-            <input type="email" name="email" placeholder="Adresse e-mail" required>
+<?php if (!isset($_SESSION['user'])): ?>
+<div id="popup">
+    <div class="form-box">
+        <h3>Connexion / Inscription</h3>
+        <form method="POST">
+            <input type="text" name="username" placeholder="Nom d'utilisateur" required>
             <input type="password" name="password" placeholder="Mot de passe" required>
-            <button type="submit">Se connecter</button>
+            <button type="submit" name="action" value="login">Se connecter</button>
+            <button type="submit" name="action" value="register">S'inscrire</button>
         </form>
-        <?php if ($message && !$connecte): ?>
-            <div class="message"><?php echo $message; ?></div>
-        <?php endif; ?>
+        <div class="message"><?= htmlspecialchars($message) ?></div>
     </div>
 </div>
-
+<?php else: ?>
 <script>
-// Fermer le modal si on clique en dehors
-window.onclick = function(event) {
-    let modal = document.getElementById('loginModal');
-    if (event.target === modal) {
-        modal.style.display = "none";
-    }
-}
+    document.body.innerHTML = ""; // efface tout
+    alert("Bienvenue <?= $_SESSION['user'] ?> !");
 </script>
-
+<?php endif; ?>
 </body>
 </html>
