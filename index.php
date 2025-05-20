@@ -1,47 +1,41 @@
 <?php
-require_once __DIR__ . '/lib/SimpleXLSX.php';
+// URL brute vers ton fichier CSV (hébergé sur GitHub ou autre)
+$url = 'https://raw.githubusercontent.com/HansHugoHMB/HMB-TECH-PHP/main/data.csv';
 
-$url = 'https://raw.githubusercontent.com/HansHugoHMB/HMB-TECH-PHP/main/php.xlsx';
+// Récupère la recherche si elle existe
 $search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
 
-$tempFile = tempnam(sys_get_temp_dir(), 'xlsx_');
+// Télécharge le fichier temporairement
+$tempFile = tempnam(sys_get_temp_dir(), 'csv_');
 file_put_contents($tempFile, file_get_contents($url));
 
-$data = [];
+// Lecture du CSV
+$data = array_map('str_getcsv', file($tempFile));
+unlink($tempFile); // supprime le fichier temporaire
 
-if ($xlsx = SimpleXLSX::parse($tempFile)) {
-    $rows = $xlsx->rows();
-    $headers = $rows[0];
-    $data = $rows;
-
-    if ($search !== '') {
-        $filteredData = [$headers];
-        for ($i = 1; $i < count($rows); $i++) {
-            $rowStr = strtolower(implode(' ', $rows[$i]));
-            if (strpos($rowStr, $search) !== false) {
-                $filteredData[] = $rows[$i];
-            }
+// Filtrage si recherche
+if ($search !== '') {
+    $filteredData = [$data[0]]; // garder l'en-tête
+    foreach (array_slice($data, 1) as $row) {
+        if (strpos(strtolower(implode(' ', $row)), $search) !== false) {
+            $filteredData[] = $row;
         }
-    } else {
-        $filteredData = $data;
     }
 } else {
-    die('Erreur : ' . SimpleXLSX::parseError());
+    $filteredData = $data;
 }
-
-unlink($tempFile);
 ?>
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Affichage Excel</title>
+<meta charset="UTF-8">
+<title>Données CSV</title>
 <style>
-    body { background-color: #0D1C40; color: gold; font-family: Arial, sans-serif; padding: 20px; }
-    input[type="text"] { padding: 8px; width: 300px; border-radius: 5px; border: none; margin-bottom: 20px; font-size: 16px; }
-    button { padding: 8px 15px; background-color: gold; color: #0D1C40; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; font-size: 16px; }
-    table { width: 100%; border-collapse: collapse; }
+    body { background-color: #0D1C40; color: gold; font-family: Arial; padding: 20px; }
+    input { padding: 8px; width: 300px; border-radius: 5px; font-size: 16px; }
+    button { padding: 8px 15px; background: gold; color: #0D1C40; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { border: 1px solid gold; padding: 10px; text-align: left; }
     th { background-color: #092040; }
     tr:nth-child(even) { background-color: #152b60; }
@@ -49,13 +43,13 @@ unlink($tempFile);
 </head>
 <body>
 
-<h1>Affichage des données Excel</h1>
+<h1>Affichage CSV</h1>
 
 <form method="GET" action="">
-    <input type="text" name="search" placeholder="Rechercher un nom..." value="<?php echo htmlspecialchars($search); ?>" />
+    <input type="text" name="search" placeholder="Rechercher..." value="<?php echo htmlspecialchars($search); ?>">
     <button type="submit">Rechercher</button>
     <?php if ($search !== ''): ?>
-        <button type="button" onclick="window.location='affiche_excel.php'">Réinitialiser</button>
+        <button type="button" onclick="window.location='analyse_csv.php'">Réinitialiser</button>
     <?php endif; ?>
 </form>
 
