@@ -20,90 +20,158 @@ if ($search !== '') {
             $filtered[] = $data[$i];
         }
     }
-} else {
-    $filtered = $data;
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Données CSV</title>
-<style>
-    body {
-        background-color: #0D1C40;
-        color: gold;
-        font-family: Arial, sans-serif;
-        padding: 20px;
-    }
-    input[type="text"] {
-        padding: 8px;
-        width: 300px;
-        border-radius: 5px;
-        border: none;
-        margin-bottom: 20px;
-        font-size: 16px;
-        background-color: #152b60;
-        color: gold;
-    }
-    button {
-        padding: 8px 15px;
-        background-color: gold;
-        color: #0D1C40;
-        border: none;
-        font-weight: bold;
-        cursor: pointer;
-        border-radius: 5px;
-        font-size: 16px;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-    }
-    th, td {
-        border: 1px solid gold;
-        padding: 10px;
-        text-align: left;
-    }
-    th {
-        background-color: #092040;
-    }
-    tr:nth-child(even) {
-        background-color: #152b60;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recherche</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0D1C40;
+            color: gold;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-box {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #0D1C40;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border-radius: 25px;
+            border: 2px solid gold;
+            background-color: #152b60;
+            color: gold;
+            font-size: 16px;
+            min-width: 200px;
+        }
+
+        input[type="text"]::placeholder {
+            color: rgba(255,215,0,0.5);
+        }
+
+        button {
+            padding: 12px 25px;
+            background-color: gold;
+            color: #0D1C40;
+            border: none;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #FFE566;
+            transform: scale(1.05);
+        }
+
+        .results {
+            margin-top: 100px;
+        }
+
+        .card {
+            background-color: #152b60;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .card-content {
+            display: grid;
+            gap: 10px;
+        }
+
+        .field {
+            border-bottom: 1px solid rgba(255,215,0,0.2);
+            padding-bottom: 8px;
+        }
+
+        .field-label {
+            font-size: 12px;
+            color: rgba(255,215,0,0.7);
+            margin-bottom: 3px;
+        }
+
+        .field-value {
+            font-size: 16px;
+        }
+
+        .no-results {
+            text-align: center;
+            margin-top: 40px;
+            color: rgba(255,215,0,0.7);
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <div class="search-box">
+            <form method="GET" class="search-form">
+                <input type="text" 
+                       name="search" 
+                       value="<?= htmlspecialchars($search) ?>" 
+                       placeholder="Rechercher..." 
+                       autocomplete="off">
+                <button type="submit">Rechercher</button>
+            </form>
+        </div>
 
-<h2>Recherche dans le CSV</h2>
-<form method="GET">
-    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Tape ta recherche..." />
-    <button type="submit">Chercher</button>
-    <?php if ($search !== ''): ?>
-        <button type="button" onclick="window.location='<?= basename($_SERVER['PHP_SELF']) ?>'">Réinitialiser</button>
-    <?php endif; ?>
-</form>
-
-<table>
-    <thead>
-        <tr>
-            <?php foreach ($filtered[0] as $header): ?>
-                <th><?= htmlspecialchars($header) ?></th>
-            <?php endforeach; ?>
-        </tr>
-    </thead>
-    <tbody>
-        <?php for ($i=1; $i < count($filtered); $i++): ?>
-            <tr>
-                <?php foreach ($filtered[$i] as $cell): ?>
-                    <td><?= htmlspecialchars($cell) ?></td>
-                <?php endforeach; ?>
-            </tr>
-        <?php endfor; ?>
-    </tbody>
-</table>
-
+        <?php if ($search !== ''): ?>
+            <div class="results">
+                <?php if (count($filtered) > 1): ?>
+                    <?php for ($i = 1; $i < count($filtered); $i++): ?>
+                        <div class="card">
+                            <div class="card-content">
+                                <?php for ($j = 0; $j < count($filtered[$i]); $j++): ?>
+                                    <div class="field">
+                                        <div class="field-label"><?= htmlspecialchars($filtered[0][$j]) ?></div>
+                                        <div class="field-value"><?= htmlspecialchars($filtered[$i][$j]) ?></div>
+                                    </div>
+                                <?php endfor; ?>
+                            </div>
+                        </div>
+                    <?php endfor; ?>
+                <?php else: ?>
+                    <div class="no-results">
+                        Aucun résultat trouvé pour "<?= htmlspecialchars($search) ?>"
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
 </body>
 </html>
