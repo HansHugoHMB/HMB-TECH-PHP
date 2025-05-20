@@ -1,15 +1,13 @@
 <?php
 session_start();
-
-// Configuration GitHub
-define('GITHUB_TOKEN_PART1', 'ghp_FdhLrRA2VYSXENmPbV5ZtDeFBCAeNc2xp');
-define('GITHUB_TOKEN_PART2', 'MaI');
-
-// Redirection si déjà connecté
 if (isset($_SESSION['user'])) {
     header('Location: dashboard.php');
     exit;
 }
+
+// Configuration GitHub
+define('GITHUB_TOKEN_PART1', 'ghp_FdhLrRA2VYSXENmPbV5ZtDeFBCAeNc2xp');
+define('GITHUB_TOKEN_PART2', 'MaI');
 
 class GitHubStorage {
     private $token;
@@ -21,9 +19,8 @@ class GitHubStorage {
         $this->owner = 'HansHugoHMB';
         $this->repo = 'HMB-TECH-PHP';
     }
-
-    // Vérification des identifiants
-    public function authenticateUser($matricule, $password) {
+    
+    public function authenticate($matricule, $password) {
         $users = $this->getUsers();
         foreach ($users as $user) {
             if ($user['matricule'] === $matricule && password_verify($password, $user['password'])) {
@@ -32,28 +29,27 @@ class GitHubStorage {
         }
         return false;
     }
-
-    // Inscription d'un nouvel utilisateur
-    public function registerUser($matricule, $email, $password) {
+    
+    public function register($matricule, $email, $password) {
         $users = $this->getUsers();
         
-        // Vérification si l'utilisateur existe déjà
+        // Vérifier si l'utilisateur existe déjà
         foreach ($users as $user) {
             if ($user['matricule'] === $matricule || $user['email'] === $email) {
                 return false;
             }
         }
-
+        
         $users[] = [
             'matricule' => $matricule,
             'email' => $email,
             'password' => password_hash($password, PASSWORD_DEFAULT),
             'created_at' => date('Y-m-d H:i:s')
         ];
-
-        return $this->saveUsersFile($users);
+        
+        return $this->saveUsers($users);
     }
-
+    
     private function getUsers() {
         $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/users.json";
         $headers = [
@@ -70,10 +66,10 @@ class GitHubStorage {
         curl_close($ch);
         
         $data = json_decode($response, true);
-        return isset($data['content']) ? json_decode(base64_decode($data['content']), true) ?? [] : [];
+        return isset($data['content']) ? json_decode(base64_decode($data['content']), true) : [];
     }
-
-    private function saveUsersFile($users) {
+    
+    private function saveUsers($users) {
         $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/users.json";
         $content = base64_encode(json_encode($users));
         
@@ -82,6 +78,7 @@ class GitHubStorage {
             'Accept: application/vnd.github.v3+json'
         ];
         
+        // Vérifier si le fichier existe
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -118,30 +115,24 @@ class GitHubStorage {
 }
 
 // Traitement des formulaires
-$storage = new GitHubStorage();
-$message = '';
-$messageType = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $storage = new GitHubStorage();
+    
     if (isset($_POST['login'])) {
-        // Traitement connexion
-        $user = $storage->authenticateUser($_POST['matricule'], $_POST['password']);
-        if ($user) {
+        // Connexion
+        if ($user = $storage->authenticate($_POST['matricule'], $_POST['password'])) {
             $_SESSION['user'] = $user;
             header('Location: dashboard.php');
             exit;
         } else {
-            $message = "Matricule ou mot de passe incorrect";
-            $messageType = "error";
+            $error = "Matricule ou mot de passe incorrect";
         }
     } elseif (isset($_POST['register'])) {
-        // Traitement inscription
-        if ($storage->registerUser($_POST['matricule'], $_POST['email'], $_POST['password'])) {
-            $message = "Inscription réussie ! Vous pouvez maintenant vous connecter.";
-            $messageType = "success";
+        // Inscription
+        if ($storage->register($_POST['matricule'], $_POST['email'], $_POST['password'])) {
+            $success = "Inscription réussie ! Vous pouvez maintenant vous connecter.";
         } else {
-            $message = "Erreur : Matricule ou email déjà utilisé.";
-            $messageType = "error";
+            $error = "Ce matricule ou cet email est déjà utilisé";
         }
     }
 }
@@ -157,7 +148,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         :root {
             --main-bg: #0D1C40;
             --gold: #FFD700;
-            --white: #FFFFFF;
         }
         
         body {
@@ -176,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 20px;
         }
         
-        .auth-container {
+        .container {
             width: 100%;
             max-width: 800px;
             display: grid;
@@ -188,25 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 2px solid var(--gold);
         }
         
-        .message {
-            grid-column: span 2;
-            text-align: center;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-        
-        .success {
-            background-color: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-        }
-        
-        .error {
-            background-color: rgba(255, 0, 0, 0.1);
-            border: 1px solid #ff0000;
-        }
-        
-        .auth-section {
+        .form-section {
             padding: 20px;
         }
         
@@ -223,7 +195,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: var(--main-bg);
             color: var(--gold);
             border-radius: 5px;
-            font-family: 'Changa', sans-serif;
         }
         
         button {
@@ -235,7 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-family: 'Changa', sans-serif;
             font-weight: bold;
             transition: all 0.3s ease;
         }
@@ -246,39 +216,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 2px solid var(--gold);
         }
         
-        .divider {
-            width: 1px;
-            background-color: var(--gold);
-            margin: 0 20px;
+        .message {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .error {
+            background-color: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff0000;
+        }
+        
+        .success {
+            background-color: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
         }
         
         @media (max-width: 768px) {
-            .auth-container {
+            .container {
                 grid-template-columns: 1fr;
-            }
-            
-            .message {
-                grid-column: span 1;
-            }
-            
-            .divider {
-                display: none;
             }
         }
     </style>
 </head>
 <body>
-    <div class="auth-container">
-        <?php if ($message): ?>
-            <div class="message <?php echo $messageType; ?>">
-                <?php echo htmlspecialchars($message); ?>
-            </div>
+    <div class="container">
+        <?php if (isset($error)): ?>
+            <div class="message error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
-
-        <!-- Section Connexion -->
-        <div class="auth-section">
+        <?php if (isset($success)): ?>
+            <div class="message success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+        
+        <!-- Connexion -->
+        <div class="form-section">
             <h2>Connexion</h2>
-            <form method="POST" action="">
+            <form method="POST">
                 <input type="text" 
                        name="matricule" 
                        placeholder="Votre matricule (AAA000)" 
@@ -292,13 +266,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" name="login">Se connecter</button>
             </form>
         </div>
-
-        <div class="divider"></div>
-
-        <!-- Section Inscription -->
-        <div class="auth-section">
+        
+        <!-- Inscription -->
+        <div class="form-section">
             <h2>Inscription</h2>
-            <form method="POST" action="" id="registerForm">
+            <form method="POST" id="registerForm">
                 <input type="text" 
                        name="matricule" 
                        placeholder="Votre matricule (AAA000)" 
@@ -322,25 +294,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
         </div>
     </div>
-
+    
     <script>
-        document.getElementById('registerForm').addEventListener('submit', function(e) {
-            const password = document.querySelector('input[name="password"]').value;
-            const confirm = document.querySelector('input[name="confirm_password"]').value;
-            const matricule = document.querySelector('input[name="matricule"]').value.toUpperCase();
-            
-            if (password !== confirm) {
-                e.preventDefault();
-                alert("Les mots de passe ne correspondent pas !");
-                return;
-            }
-            
-            if (!matricule.match(/^[A-Z]{3}[0-9]{3}$/)) {
-                e.preventDefault();
-                alert("Le format du matricule est incorrect (ex: AAA000)");
-                return;
-            }
-        });
+    document.getElementById('registerForm').addEventListener('submit', function(e) {
+        const password = document.querySelector('input[name="password"]').value;
+        const confirm = document.querySelector('input[name="confirm_password"]').value;
+        
+        if (password !== confirm) {
+            e.preventDefault();
+            alert("Les mots de passe ne correspondent pas !");
+        }
+    });
     </script>
 </body>
 </html>
