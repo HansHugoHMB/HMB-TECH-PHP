@@ -1,76 +1,55 @@
 <?php
-// URL brute vers ton fichier CSV (hébergé sur GitHub ou autre)
-$url = 'https://raw.githubusercontent.com/HansHugoHMB/HMB-TECH-PHP/main/data.csv';
+$csvUrl = 'https://raw.githubusercontent.com/HansHugoHMB/HMB-TECH-PHP/main/php.csv';
 
-// Récupère la recherche si elle existe
 $search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
 
-// Télécharge le fichier temporairement
 $tempFile = tempnam(sys_get_temp_dir(), 'csv_');
-file_put_contents($tempFile, file_get_contents($url));
+file_put_contents($tempFile, file_get_contents($csvUrl));
 
-// Lecture du CSV
-$data = array_map('str_getcsv', file($tempFile));
-unlink($tempFile); // supprime le fichier temporaire
+$data = [];
+if (($handle = fopen($tempFile, 'r')) !== false) {
+    while (($row = fgetcsv($handle, 1000, ',')) !== false) {
+        $data[] = $row;
+    }
+    fclose($handle);
+}
+unlink($tempFile);
 
-// Filtrage si recherche
+// Filtrage
+$filtered = [];
 if ($search !== '') {
-    $filteredData = [$data[0]]; // garder l'en-tête
-    foreach (array_slice($data, 1) as $row) {
-        if (strpos(strtolower(implode(' ', $row)), $search) !== false) {
-            $filteredData[] = $row;
+    $filtered[] = $data[0];
+    for ($i = 1; $i < count($data); $i++) {
+        if (strpos(strtolower(implode(' ', $data[$i])), $search) !== false) {
+            $filtered[] = $data[$i];
         }
     }
 } else {
-    $filteredData = $data;
+    $filtered = $data;
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Données CSV</title>
-<style>
-    body { background-color: #0D1C40; color: gold; font-family: Arial; padding: 20px; }
-    input { padding: 8px; width: 300px; border-radius: 5px; font-size: 16px; }
-    button { padding: 8px 15px; background: gold; color: #0D1C40; border: none; font-weight: bold; cursor: pointer; border-radius: 5px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid gold; padding: 10px; text-align: left; }
-    th { background-color: #092040; }
-    tr:nth-child(even) { background-color: #152b60; }
-</style>
+    <meta charset="UTF-8">
+    <title>Données CSV</title>
 </head>
 <body>
-
-<h1>Affichage CSV</h1>
-
-<form method="GET" action="">
-    <input type="text" name="search" placeholder="Rechercher..." value="<?php echo htmlspecialchars($search); ?>">
-    <button type="submit">Rechercher</button>
-    <?php if ($search !== ''): ?>
-        <button type="button" onclick="window.location='analyse_csv.php'">Réinitialiser</button>
-    <?php endif; ?>
+<h2>Recherche</h2>
+<form method="GET">
+    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>">
+    <button type="submit">Chercher</button>
 </form>
 
-<table>
-    <thead>
+<table border="1" cellpadding="8">
+    <?php foreach ($filtered as $row): ?>
         <tr>
-            <?php foreach ($filteredData[0] as $header): ?>
-                <th><?php echo htmlspecialchars($header); ?></th>
+            <?php foreach ($row as $cell): ?>
+                <td><?= htmlspecialchars($cell) ?></td>
             <?php endforeach; ?>
         </tr>
-    </thead>
-    <tbody>
-        <?php for ($i = 1; $i < count($filteredData); $i++): ?>
-            <tr>
-                <?php foreach ($filteredData[$i] as $cell): ?>
-                    <td><?php echo htmlspecialchars($cell); ?></td>
-                <?php endforeach; ?>
-            </tr>
-        <?php endfor; ?>
-    </tbody>
+    <?php endforeach; ?>
 </table>
-
 </body>
 </html>
