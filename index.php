@@ -1,109 +1,90 @@
 <?php
-$csvUrl = 'https://raw.githubusercontent.com/HansHugoHMB/d-c/main/data.csv';
-$search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
-$tempFile = tempnam(sys_get_temp_dir(), 'csv_');
-file_put_contents($tempFile, file_get_contents($csvUrl));
-$data = [];
-if (($handle = fopen($tempFile, 'r')) !== false) {
-    while (($row = fgetcsv($handle, 1000, ',')) !== false) {
-        $data[] = $row;
-    }
-    fclose($handle);
-}
-unlink($tempFile);
+$menu = [
+    "ACCEUIL" => "https://d-c-hmb-tech.pages.dev/acceuil",
+    "DÉCRYPTEUR & CRYPTEUR" => "https://d-c-hmb-tech.pages.dev",
+    "PDF PRINTER" => "https://d-c-hmb-tech.pages.dev/print",
+    "CODE SOURCE VIEWERS" => "https://v-s-hmb-tech.pages.dev",
+    "FAMILY REGISTER" => "https://d-c-hmb-tech.pages.dev/family%20forms",
+    "LIEN SHORTCUT" => "https://d-c-hmb-tech.pages.dev/shortcut",
+    "HTML CHIFFRÉ" => "https://d-c-hmb-tech.pages.dev/obst",
+    "DÉCHIFFRER HTML" => "https://prepa-h.pages.dev/fuc",
+    "PRENDRE RDV" => "https://d-c-hmb-tech.pages.dev/rdv",
+    "NEWSLETTER" => "https://d-c-hmb-tech.pages.dev/newsletter",
+];
 
-$filtered = [];
-if ($search !== '') {
-    $filtered[] = $data[0];
-    for ($i = 1; $i < count($data); $i++) {
-        if (strpos(strtolower(implode(' ', $data[$i])), $search) !== false) {
-            $filtered[] = $data[$i];
-        }
-    }
-} else {
-    $filtered = $data;
-}
+$current = $_GET['page'] ?? array_key_first($menu);
+$current = $menu[$current] ?? reset($menu);
 ?>
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Données CSV</title>
-<style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Portail HMB</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Underdog&display=swap">
+  <style>
     body {
-        background-color: #0D1C40;
-        color: gold;
-        font-family: Arial, sans-serif;
-        padding: 20px;
+      margin: 0;
+      padding-top: 110px;
+      font-family: 'Underdog', serif;
+      background: #0D1C49 url('https://images.unsplash.com/photo-1553095066-5014bc7b7f2d?q=80&w=2070&auto=format&fit=crop') center/cover fixed;
+      color: gold;
     }
-    input[type="text"] {
-        padding: 8px;
-        width: 300px;
-        border-radius: 5px;
-        border: none;
-        margin-bottom: 20px;
-        font-size: 16px;
-        background-color: #152b60;
-        color: gold;
+    .header {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #0D1C40;
+      padding: 15px;
+      border-radius: 10px;
+      border: 2px solid white;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 90%;
     }
-    button {
-        padding: 8px 15px;
-        background-color: gold;
-        color: #0D1C40;
-        border: none;
-        font-weight: bold;
-        cursor: pointer;
-        border-radius: 5px;
-        font-size: 16px;
+    .menu {
+      position: fixed;
+      top: 130px;
+      left: 10px;
+      background: #0D1C40;
+      padding: 20px;
+      border: 2px solid white;
+      border-radius: 10px;
+      z-index: 999;
     }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
+    .menu a {
+      display: block;
+      color: gold;
+      text-decoration: none;
+      margin: 10px 0;
     }
-    th, td {
-        border: 1px solid gold;
-        padding: 10px;
-        text-align: left;
+    .menu a:hover {
+      text-decoration: underline;
     }
-    th {
-        background-color: #092040;
+    iframe {
+      border: none;
+      width: 100%;
+      height: 90vh;
+      position: relative;
+      z-index: 1;
     }
-    tr:nth-child(even) {
-        background-color: #152b60;
-    }
-</style>
+  </style>
 </head>
 <body>
+  <div class="header">
+    <img src="https://github.com/HansHugoHMB/Images/blob/main/HMB-TECH%20LOGO.svg?raw=true" alt="HMB Logo" height="60">
+    <h2>Portail HMB</h2>
+  </div>
 
-<h2>Recherche dans le CSV</h2>
-<form method="GET">
-    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Tape ta recherche..." />
-    <button type="submit">Chercher</button>
-    <?php if ($search !== ''): ?>
-        <button type="button" onclick="window.location='<?= basename($_SERVER['PHP_SELF']) ?>'">Réinitialiser</button>
-    <?php endif; ?>
-</form>
+  <div class="menu">
+    <?php foreach ($menu as $name => $link): ?>
+      <a href="?page=<?= urlencode($name) ?>"><?= htmlspecialchars($name) ?></a>
+    <?php endforeach; ?>
+  </div>
 
-<table>
-    <thead>
-        <tr>
-            <?php foreach ($filtered[0] as $header): ?>
-                <th><?= htmlspecialchars($header) ?></th>
-            <?php endforeach; ?>
-        </tr>
-    </thead>
-    <tbody>
-        <?php for ($i=1; $i < count($filtered); $i++): ?>
-            <tr>
-                <?php foreach ($filtered[$i] as $cell): ?>
-                    <td><?= htmlspecialchars($cell) ?></td>
-                <?php endforeach; ?>
-            </tr>
-        <?php endfor; ?>
-    </tbody>
-</table>
-
+  <iframe src="<?= htmlspecialchars($current) ?>" loading="eager"></iframe>
 </body>
 </html>
