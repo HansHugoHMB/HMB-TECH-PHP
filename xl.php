@@ -1,135 +1,55 @@
 <?php
-require 'vendor/autoload.php';
+$csvUrl = 'https://raw.githubusercontent.com/HansHugoHMB/d-c/main/data.csv';
 
-use PhpOffice\PhpSpreadsheet\IOFactory;
-
-// URL brute du fichier Excel sur GitHub
-$url = 'https://raw.githubusercontent.com/username/repo/branch/fichier.xlsx';
-
-// Récupérer la recherche (si soumise)
 $search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
 
-// Télécharger le fichier temporairement
-$tempFile = tempnam(sys_get_temp_dir(), 'excel_');
-file_put_contents($tempFile, file_get_contents($url));
+$tempFile = tempnam(sys_get_temp_dir(), 'csv_');
+file_put_contents($tempFile, file_get_contents($csvUrl));
 
-// Charger le fichier Excel
-$spreadsheet = IOFactory::load($tempFile);
-$sheet = $spreadsheet->getActiveSheet();
-
-// Récupérer toutes les données dans un tableau
 $data = [];
-foreach ($sheet->getRowIterator() as $row) {
-    $cellIterator = $row->getCellIterator();
-    $cellIterator->setIterateOnlyExistingCells(false);
-    $rowData = [];
-    foreach ($cellIterator as $cell) {
-        $rowData[] = $cell->getValue();
+if (($handle = fopen($tempFile, 'r')) !== false) {
+    while (($row = fgetcsv($handle, 1000, ',')) !== false) {
+        $data[] = $row;
     }
-    $data[] = $rowData;
+    fclose($handle);
 }
+unlink($tempFile);
 
-unlink($tempFile); // Supprimer fichier temporaire
-
-// Si recherche, filtrer les données sauf la 1ère ligne (en-têtes)
+// Filtrage
+$filtered = [];
 if ($search !== '') {
-    $filteredData = [];
-    $filteredData[] = $data[0]; // garder les en-têtes
+    $filtered[] = $data[0];
     for ($i = 1; $i < count($data); $i++) {
-        $rowStr = strtolower(implode(' ', $data[$i]));
-        if (strpos($rowStr, $search) !== false) {
-            $filteredData[] = $data[$i];
+        if (strpos(strtolower(implode(' ', $data[$i])), $search) !== false) {
+            $filtered[] = $data[$i];
         }
     }
 } else {
-    $filteredData = $data;
+    $filtered = $data;
 }
-
 ?>
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Affichage Excel</title>
-<style>
-    body {
-        background-color: #0D1C40;
-        color: gold;
-        font-family: Arial, sans-serif;
-        padding: 20px;
-    }
-    input[type="text"] {
-        padding: 8px;
-        width: 300px;
-        border-radius: 5px;
-        border: none;
-        margin-bottom: 20px;
-        font-size: 16px;
-    }
-    button {
-        padding: 8px 15px;
-        background-color: gold;
-        color: #0D1C40;
-        border: none;
-        font-weight: bold;
-        cursor: pointer;
-        border-radius: 5px;
-        font-size: 16px;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    th, td {
-        border: 1px solid gold;
-        padding: 10px;
-        text-align: left;
-    }
-    th {
-        background-color: #092040;
-    }
-    tr:nth-child(even) {
-        background-color: #152b60;
-    }
-</style>
+    <meta charset="UTF-8">
+    <title>Données CSV</title>
 </head>
 <body>
-
-<h1>Affichage des données Excel</h1>
-
-<form method="GET" action="">
-    <input type="text" name="search" placeholder="Rechercher un nom..." value="<?php echo htmlspecialchars($search); ?>" />
-    <button type="submit">Rechercher</button>
-    <?php if ($search !== ''): ?>
-        <button type="button" onclick="window.location='affiche_excel.php'">Réinitialiser</button>
-    <?php endif; ?>
+<h2>Recherche</h2>
+<form method="GET">
+    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>">
+    <button type="submit">Chercher</button>
 </form>
 
-<table>
-    <thead>
+<table border="1" cellpadding="8">
+    <?php foreach ($filtered as $row): ?>
         <tr>
-            <?php
-            // Affiche la 1ère ligne comme en-têtes
-            foreach ($filteredData[0] as $header) {
-                echo '<th>' . htmlspecialchars($header) . '</th>';
-            }
-            ?>
+            <?php foreach ($row as $cell): ?>
+                <td><?= htmlspecialchars($cell) ?></td>
+            <?php endforeach; ?>
         </tr>
-    </thead>
-    <tbody>
-        <?php
-        // Affiche les lignes restantes
-        for ($i = 1; $i < count($filteredData); $i++) {
-            echo '<tr>';
-            foreach ($filteredData[$i] as $cell) {
-                echo '<td>' . htmlspecialchars($cell) . '</td>';
-            }
-            echo '</tr>';
-        }
-        ?>
-    </tbody>
+    <?php endforeach; ?>
 </table>
-
 </body>
 </html>
