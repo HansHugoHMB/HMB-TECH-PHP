@@ -1,5 +1,5 @@
 <?php
-$csvUrl = 'https://raw.githubusercontent.com/HansHugoHMB/HMB-TECH-PHP/main/php.csv';
+$csvUrl = 'https://raw.githubusercontent.com/HansHugoHMB/d-c/main/data.csv';
 
 $search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
 
