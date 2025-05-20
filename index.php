@@ -1,68 +1,135 @@
 <?php
-$heure = date("H:i:s");
-$utilisateur = "Papa Hans";
-$produits = [
-    ["nom" => "Clavier", "prix" => 120],
-    ["nom" => "Souris", "prix" => 60],
-    ["nom" => "Écran", "prix" => 350],
-    ["nom" => "Ordinateur", "prix" => 1000]
-];
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\IOFactory;
+
+// URL brute du fichier Excel sur GitHub
+$url = 'https://raw.githubusercontent.com/username/repo/branch/fichier.xlsx';
+
+// Récupérer la recherche (si soumise)
+$search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
+
+// Télécharger le fichier temporairement
+$tempFile = tempnam(sys_get_temp_dir(), 'excel_');
+file_put_contents($tempFile, file_get_contents($url));
+
+// Charger le fichier Excel
+$spreadsheet = IOFactory::load($tempFile);
+$sheet = $spreadsheet->getActiveSheet();
+
+// Récupérer toutes les données dans un tableau
+$data = [];
+foreach ($sheet->getRowIterator() as $row) {
+    $cellIterator = $row->getCellIterator();
+    $cellIterator->setIterateOnlyExistingCells(false);
+    $rowData = [];
+    foreach ($cellIterator as $cell) {
+        $rowData[] = $cell->getValue();
+    }
+    $data[] = $rowData;
+}
+
+unlink($tempFile); // Supprimer fichier temporaire
+
+// Si recherche, filtrer les données sauf la 1ère ligne (en-têtes)
+if ($search !== '') {
+    $filteredData = [];
+    $filteredData[] = $data[0]; // garder les en-têtes
+    for ($i = 1; $i < count($data); $i++) {
+        $rowStr = strtolower(implode(' ', $data[$i]));
+        if (strpos($rowStr, $search) !== false) {
+            $filteredData[] = $data[$i];
+        }
+    }
+} else {
+    $filteredData = $data;
+}
+
 ?>
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Bienvenue sur le site de <?php echo $utilisateur; ?></title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #0D1C49;
-            padding: 20px;
-            color: #333;
-        }
-        h1 {
-            color: #005b96;
-        }
-        table {
-            border-collapse: collapse;
-            width: 60%;
-            margin-top: 20px;
-        }
-        th, td {
-            padding: 12px;
-            border: 1px solid #999;
-        }
-        th {
-            background-color: #005b96;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #e6f2ff;
-        }
-    </style>
+<meta charset="UTF-8" />
+<title>Affichage Excel</title>
+<style>
+    body {
+        background-color: #0D1C40;
+        color: gold;
+        font-family: Arial, sans-serif;
+        padding: 20px;
+    }
+    input[type="text"] {
+        padding: 8px;
+        width: 300px;
+        border-radius: 5px;
+        border: none;
+        margin-bottom: 20px;
+        font-size: 16px;
+    }
+    button {
+        padding: 8px 15px;
+        background-color: gold;
+        color: #0D1C40;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 5px;
+        font-size: 16px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        border: 1px solid gold;
+        padding: 10px;
+        text-align: left;
+    }
+    th {
+        background-color: #092040;
+    }
+    tr:nth-child(even) {
+        background-color: #152b60;
+    }
+</style>
 </head>
 <body>
-    <h1>Bonjour <?php echo $utilisateur; ?> !</h1>
-    <p>Il est actuellement : <strong><?php echo $heure; ?></strong></p>
 
-    <h2>Liste des produits disponibles :</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Nom du produit</th>
-                <th>Prix ($)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($produits as $produit): ?>
-                <tr>
-                    <td><?php echo $produit["nom"]; ?></td>
-                    <td><?php echo $produit["prix"]; ?></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+<h1>Affichage des données Excel</h1>
 
-    <p style="margin-top: 40px;">Merci de visiter ce site hébergé avec Render !</p>
+<form method="GET" action="">
+    <input type="text" name="search" placeholder="Rechercher un nom..." value="<?php echo htmlspecialchars($search); ?>" />
+    <button type="submit">Rechercher</button>
+    <?php if ($search !== ''): ?>
+        <button type="button" onclick="window.location='affiche_excel.php'">Réinitialiser</button>
+    <?php endif; ?>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <?php
+            // Affiche la 1ère ligne comme en-têtes
+            foreach ($filteredData[0] as $header) {
+                echo '<th>' . htmlspecialchars($header) . '</th>';
+            }
+            ?>
+        </tr>
+    </thead>
+    <tbody>
+        <?php
+        // Affiche les lignes restantes
+        for ($i = 1; $i < count($filteredData); $i++) {
+            echo '<tr>';
+            foreach ($filteredData[$i] as $cell) {
+                echo '<td>' . htmlspecialchars($cell) . '</td>';
+            }
+            echo '</tr>';
+        }
+        ?>
+    </tbody>
+</table>
+
 </body>
 </html>
