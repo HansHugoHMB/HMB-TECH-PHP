@@ -4,7 +4,7 @@ require 'vendor/autoload.php';
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 // URL brute du fichier Excel sur GitHub
-$url = 'https://github.com/HansHugoHMB/HMB-TECH-PHP/blob/main/php.xlsx';
+$url = 'https://raw.githubusercontent.com/HansHugoHMB/HMB-TECH-PHP/main/php.xlsx';
 
 // Récupérer la recherche (si soumise)
 $search = isset($_GET['search']) ? strtolower(trim($_GET['search'])) : '';
