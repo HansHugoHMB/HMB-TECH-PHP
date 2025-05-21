@@ -1,6 +1,15 @@
 <?php
 session_start();
-if (!isset($_SESSION['user'])) {  // Notez le ! (NOT)
+
+// Vérification de la connexion
+if (!isset($_SESSION['user'])) {
+    header('Location: index.php');
+    exit;
+}
+
+// Déconnexion
+if (isset($_GET['logout'])) {
+    session_destroy();
     header('Location: index.php');
     exit;
 }
@@ -20,38 +29,67 @@ class GitHubStorage {
         $this->repo = 'HMB-TECH-PHP';
     }
     
-    public function authenticate($matricule, $password) {
-        $users = $this->getUsers();
-        foreach ($users as $user) {
-            if ($user['matricule'] === $matricule && password_verify($password, $user['password'])) {
-                return $user;
-            }
-        }
-        return false;
-    }
-    
-    public function register($matricule, $email, $password) {
-        $users = $this->getUsers();
+    // Enregistrer une présence
+    public function signPresence($matricule) {
+        $date = date('Y-m-d');
+        $presences = $this->getDailyPresences($date);
         
-        // Vérifier si l'utilisateur existe déjà
-        foreach ($users as $user) {
-            if ($user['matricule'] === $matricule || $user['email'] === $email) {
+        // Vérifier si déjà présent
+        foreach ($presences as $presence) {
+            if ($presence['matricule'] === $matricule) {
                 return false;
             }
         }
         
-        $users[] = [
+        // Ajouter la présence
+        $presences[] = [
             'matricule' => $matricule,
-            'email' => $email,
-            'password' => password_hash($password, PASSWORD_DEFAULT),
-            'created_at' => date('Y-m-d H:i:s')
+            'timestamp' => date('Y-m-d H:i:s')
         ];
         
-        return $this->saveUsers($users);
+        // Sauvegarder dans les deux endroits
+        $this->saveDailyPresences($date, $presences);
+        $this->updateUserHistory($matricule, $date);
+        
+        return true;
     }
     
-    private function getUsers() {
-        $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/users.json";
+    // Récupérer les présences du jour
+    public function getDailyPresences($date) {
+        $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/presences/{$date}.json";
+        $content = $this->getGitHubFile($url);
+        return $content ? json_decode($content, true) : [];
+    }
+    
+    // Sauvegarder les présences du jour
+    private function saveDailyPresences($date, $presences) {
+        $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/presences/{$date}.json";
+        return $this->saveGitHubFile($url, $presences);
+    }
+    
+    // Mettre à jour l'historique de l'utilisateur
+    private function updateUserHistory($matricule, $date) {
+        $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/history/{$matricule}.json";
+        $history = $this->getGitHubFile($url) ?: '[]';
+        $history = json_decode($history, true) ?: [];
+        
+        $history[] = [
+            'date' => $date,
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+        
+        return $this->saveGitHubFile($url, $history);
+    }
+    
+    // Récupérer l'historique d'un utilisateur
+    public function getUserHistory($matricule) {
+        $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/history/{$matricule}.json";
+        $content = $this->getGitHubFile($url);
+        return $content ? json_decode($content, true) : [];
+    }
+    
+    // Fonctions utilitaires GitHub
+    private function getGitHubFile($url) {
         $headers = [
             'Authorization: token ' . $this->token,
             'Accept: application/vnd.github.v3+json'
@@ -66,13 +104,10 @@ class GitHubStorage {
         curl_close($ch);
         
         $data = json_decode($response, true);
-        return isset($data['content']) ? json_decode(base64_decode($data['content']), true) : [];
+        return isset($data['content']) ? base64_decode($data['content']) : null;
     }
     
-    private function saveUsers($users) {
-        $url = "https://api.github.com/repos/{$this->owner}/{$this->repo}/contents/data/users.json";
-        $content = base64_encode(json_encode($users));
-        
+    private function saveGitHubFile($url, $content) {
         $headers = [
             'Authorization: token ' . $this->token,
             'Accept: application/vnd.github.v3+json'
@@ -90,8 +125,8 @@ class GitHubStorage {
         $sha = isset($data['sha']) ? $data['sha'] : null;
         
         $postData = [
-            'message' => 'Update users data',
-            'content' => $content
+            'message' => 'Update data',
+            'content' => base64_encode(json_encode($content))
         ];
         
         if ($sha) {
@@ -107,42 +142,38 @@ class GitHubStorage {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         
-        return $httpCode === 200 || $httpCode === 201;
+        return true;
     }
 }
 
-// Traitement des formulaires
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $storage = new GitHubStorage();
-    
-    if (isset($_POST['login'])) {
-        // Connexion
-        if ($user = $storage->authenticate($_POST['matricule'], $_POST['password'])) {
-            $_SESSION['user'] = $user;
-            header('Location: dashboard.php');
-            exit;
-        } else {
-            $error = "Matricule ou mot de passe incorrect";
-        }
-    } elseif (isset($_POST['register'])) {
-        // Inscription
-        if ($storage->register($_POST['matricule'], $_POST['email'], $_POST['password'])) {
-            $success = "Inscription réussie ! Vous pouvez maintenant vous connecter.";
-        } else {
-            $error = "Ce matricule ou cet email est déjà utilisé";
-        }
+// Traitement des actions
+$storage = new GitHubStorage();
+$message = '';
+$messageType = '';
+
+// Signer la présence
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sign_presence'])) {
+    if ($storage->signPresence($_SESSION['user']['matricule'])) {
+        $message = "Présence enregistrée avec succès !";
+        $messageType = "success";
+    } else {
+        $message = "Vous avez déjà signé votre présence aujourd'hui.";
+        $messageType = "info";
     }
 }
+
+// Récupération des données
+$todayPresences = $storage->getDailyPresences(date('Y-m-d'));
+$userHistory = $storage->getUserHistory($_SESSION['user']['matricule']);
 ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connexion - Power Family</title>
+    <title>Tableau de bord - Power Family</title>
     <link href="https://fonts.googleapis.com/css2?family=Changa&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -160,52 +191,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-attachment: fixed;
             font-family: 'Changa', sans-serif;
             color: var(--gold);
-            display: flex;
-            align-items: center;
-            justify-content: center;
             padding: 20px;
         }
         
         .container {
-            width: 100%;
-            max-width: 800px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
             background-color: rgba(13, 28, 64, 0.95);
             padding: 20px;
             border-radius: 10px;
             border: 2px solid var(--gold);
         }
         
-        .form-section {
-            padding: 20px;
+        .logout {
+            color: var(--gold);
+            text-decoration: none;
+            padding: 8px 16px;
+            border: 2px solid var(--gold);
+            border-radius: 5px;
+            transition: all 0.3s ease;
         }
         
-        h2 {
+        .logout:hover {
+            background-color: var(--gold);
+            color: var(--main-bg);
+        }
+        
+        .message {
             text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .success { background-color: rgba(0, 255, 0, 0.1); }
+        .info { background-color: rgba(0, 0, 255, 0.1); }
+        
+        .presence-box {
+            background-color: rgba(13, 28, 64, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid var(--gold);
             margin-bottom: 20px;
         }
         
-        input {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 2px solid var(--gold);
-            background-color: var(--main-bg);
-            color: var(--gold);
-            border-radius: 5px;
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .presence-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .presence-item {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.2);
         }
         
         button {
             width: 100%;
             padding: 12px;
-            margin-top: 20px;
             background-color: var(--gold);
             color: var(--main-bg);
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            font-family: 'Changa', sans-serif;
             font-weight: bold;
             transition: all 0.3s ease;
         }
@@ -216,25 +277,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 2px solid var(--gold);
         }
         
-        .message {
-            text-align: center;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-        }
-        
-        .error {
-            background-color: rgba(255, 0, 0, 0.1);
-            border: 1px solid #ff0000;
-        }
-        
-        .success {
-            background-color: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-        }
-        
         @media (max-width: 768px) {
-            .container {
+            .grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -242,69 +286,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <?php if (isset($error)): ?>
-            <div class="message error"><?php echo htmlspecialchars($error); ?></div>
-        <?php endif; ?>
-        <?php if (isset($success)): ?>
-            <div class="message success"><?php echo htmlspecialchars($success); ?></div>
+        <div class="header">
+            <h1>Bienvenue, <?php echo htmlspecialchars($_SESSION['user']['matricule']); ?></h1>
+            <a href="?logout=1" class="logout">Déconnexion</a>
+        </div>
+        
+        <?php if ($message): ?>
+            <div class="message <?php echo $messageType; ?>">
+                <?php echo htmlspecialchars($message); ?>
+            </div>
         <?php endif; ?>
         
-        <!-- Connexion -->
-        <div class="form-section">
-            <h2>Connexion</h2>
-            <form method="POST">
-                <input type="text" 
-                       name="matricule" 
-                       placeholder="Votre matricule (AAA000)" 
-                       required 
-                       pattern="[A-Za-z]{3}[0-9]{3}"
-                       maxlength="6">
-                <input type="password" 
-                       name="password" 
-                       placeholder="Votre mot de passe" 
-                       required>
-                <button type="submit" name="login">Se connecter</button>
+        <div class="presence-box">
+            <h2>Signer votre présence</h2>
+            <form method="POST" action="">
+                <button type="submit" name="sign_presence">
+                    Je suis présent aujourd'hui
+                </button>
             </form>
         </div>
         
-        <!-- Inscription -->
-        <div class="form-section">
-            <h2>Inscription</h2>
-            <form method="POST" id="registerForm">
-                <input type="text" 
-                       name="matricule" 
-                       placeholder="Votre matricule (AAA000)" 
-                       required 
-                       pattern="[A-Za-z]{3}[0-9]{3}"
-                       maxlength="6">
-                <input type="email" 
-                       name="email" 
-                       placeholder="Votre adresse email" 
-                       required>
-                <input type="password" 
-                       name="password" 
-                       placeholder="Votre mot de passe" 
-                       required 
-                       minlength="8">
-                <input type="password" 
-                       name="confirm_password" 
-                       placeholder="Confirmez votre mot de passe" 
-                       required>
-                <button type="submit" name="register">S'inscrire</button>
-            </form>
+        <div class="grid">
+            <div class="presence-box">
+                <h2>Présences aujourd'hui</h2>
+                <div class="presence-list">
+                    <?php foreach ($todayPresences as $presence): ?>
+                        <div class="presence-item">
+                            <?php echo htmlspecialchars($presence['matricule']); ?> - 
+                            <?php echo date('H:i', strtotime($presence['timestamp'])); ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            
+            <div class="presence-box">
+                <h2>Mon historique</h2>
+                <div class="presence-list">
+                    <?php foreach ($userHistory as $record): ?>
+                        <div class="presence-item">
+                            <?php echo date('d/m/Y', strtotime($record['date'])); ?> - 
+                            <?php echo date('H:i', strtotime($record['timestamp'])); ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         </div>
     </div>
-    
-    <script>
-    document.getElementById('registerForm').addEventListener('submit', function(e) {
-        const password = document.querySelector('input[name="password"]').value;
-        const confirm = document.querySelector('input[name="confirm_password"]').value;
-        
-        if (password !== confirm) {
-            e.preventDefault();
-            alert("Les mots de passe ne correspondent pas !");
-        }
-    });
-    </script>
 </body>
 </html>
