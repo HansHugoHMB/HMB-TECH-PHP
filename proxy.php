@@ -1,59 +1,80 @@
 <?php
-// ------- PROXY + CACHE -------
+// 1. Détection de l'URL à proxyfier depuis l'URL complète
+$requestUri = $_SERVER['REQUEST_URI'];
+$url = ltrim($requestUri, '/'); // On retire le "/" initial
 
-define('CACHE_FILE', __DIR__ . '/cache.json');
-
-function saveCache($url, $content) {
-    $cache = [];
-    if (file_exists(CACHE_FILE)) {
-        $cache = json_decode(file_get_contents(CACHE_FILE), true);
-        if (!is_array($cache)) $cache = [];
-    }
-    $cache[] = [
-        "url" => $url,
-        "timestamp" => date("c"),
-        "content" => base64_encode($content) // encode pour stocker proprement
-    ];
-    file_put_contents(CACHE_FILE, json_encode($cache, JSON_PRETTY_PRINT));
-}
-
-function fetchUrl($url) {
+// 2. Si une URL est passée, on la proxy et l'affiche
+if (filter_var($url, FILTER_VALIDATE_URL)) {
+    // Fake User-Agent mobile
     $opts = [
         "http" => [
             "method" => "GET",
-            "header" => "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1\r\n"
+            "header" => "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X)\r\n"
         ]
     ];
     $context = stream_context_create($opts);
-    return @file_get_contents($url, false, $context);
-}
+    $content = @file_get_contents($url, false, $context);
 
-if (isset($_GET['url'])) {
-    header("Access-Control-Allow-Origin: *");
-    header("Content-Type: text/html; charset=UTF-8");
-
-    $url = $_GET['url'];
-
-    // Valide URL simple (évite les injections)
-    if (!filter_var($url, FILTER_VALIDATE_URL)) {
-        echo "URL invalide.";
-        exit;
-    }
-
-    $content = fetchUrl($url);
     if ($content === false) {
-        echo "Erreur lors de la récupération.";
+        echo "<h1 style='color:red;text-align:center'>Erreur de chargement de : $url</h1>";
         exit;
     }
 
-    saveCache($url, $content);
-
-    // Nettoyage minimal : on extrait body uniquement
-    if (preg_match("/<body[^>]*>(.*?)<\/body>/is", $content, $matches)) {
-        echo $matches[1];
+    // Injecte le bouton flottant dans la page cible
+    $inject = <<<HTML
+<style>
+#proxy-btn {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: gold;
+  color: black;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-weight: bold;
+  z-index: 9999;
+}
+#proxy-form {
+  display: none;
+  position: fixed;
+  top: 50px;
+  right: 10px;
+  background: #0D1C40;
+  padding: 10px;
+  border-radius: 8px;
+  z-index: 9999;
+}
+#proxy-form input {
+  width: 250px;
+  padding: 5px;
+}
+</style>
+<button id="proxy-btn">Changer lien</button>
+<div id="proxy-form">
+  <input type="text" id="url-input" placeholder="https://..." />
+</div>
+<script>
+document.getElementById("proxy-btn").onclick = () => {
+  const form = document.getElementById("proxy-form");
+  form.style.display = form.style.display === "block" ? "none" : "block";
+};
+document.getElementById("url-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const newUrl = e.target.value.trim();
+    if (newUrl.startsWith("http")) {
+      window.location.href = "/" + newUrl;
     } else {
-        echo $content;
+      alert("Lien invalide. Il doit commencer par http(s)://");
     }
+  }
+});
+</script>
+HTML;
+
+    // Injecte le code juste après <body>
+    $content = preg_replace("/<body[^>]*>/i", "$0" . $inject, $content, 1);
+    echo $content;
     exit;
 }
 ?>
@@ -61,72 +82,44 @@ if (isset($_GET['url'])) {
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Navigateur Mobile Proxy</title>
+  <meta charset="UTF-8">
+  <title>Mini Navigateur PHP</title>
   <style>
     body {
-      background-color: #0D1C40;
+      background: #0D1C40;
       color: gold;
       font-family: sans-serif;
       display: flex;
-      flex-direction: column;
+      height: 100vh;
+      justify-content: center;
       align-items: center;
-      padding: 2em;
+      text-align: center;
     }
     input {
       padding: 10px;
       width: 80%;
-      font-size: 16px;
+      max-width: 400px;
+      font-size: 18px;
       border-radius: 5px;
       border: none;
-      margin-bottom: 1em;
-      color: #000;
-    }
-    .mobile-frame {
-      width: 375px;
-      height: 667px;
-      border-radius: 30px;
-      overflow: auto;
-      background: #1e2a5a;
-      border: 8px solid #444;
-      box-shadow: 0 0 20px black;
-      padding: 10px;
-      color: gold;
     }
   </style>
 </head>
 <body>
-  <input
-    type="text"
-    id="urlInput"
-    placeholder="Colle un lien ici (https://...) puis appuie sur Entrée"
-    spellcheck="false"
-  />
-  <div class="mobile-frame" id="result">Les données vont apparaître ici...</div>
-
+  <div>
+    <h2>Colle une URL pour commencer</h2>
+    <input id="starter" type="text" placeholder="https://meta.ai" />
+  </div>
   <script>
-    const input = document.getElementById("urlInput");
-    const result = document.getElementById("result");
-
-    input.addEventListener("keydown", function (e) {
+    const starter = document.getElementById("starter");
+    starter.addEventListener("keydown", function(e) {
       if (e.key === "Enter") {
-        const url = input.value.trim();
-        if (!url.startsWith("http")) {
-          alert("L'URL doit commencer par http:// ou https://");
-          return;
+        const u = starter.value.trim();
+        if (u.startsWith("http")) {
+          window.location.href = "/" + u;
+        } else {
+          alert("Lien invalide. Il doit commencer par http:// ou https://");
         }
-        result.innerHTML = "Chargement...";
-
-        fetch("?url=" + encodeURIComponent(url))
-          .then((res) => res.text())
-          .then((html) => {
-            result.innerHTML = html;
-            // Scroll en haut après chargement
-            result.scrollTop = 0;
-          })
-          .catch((err) => {
-            result.innerHTML = "Erreur : " + err;
-          });
       }
     });
   </script>
