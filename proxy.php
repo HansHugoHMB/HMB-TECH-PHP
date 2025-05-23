@@ -1,5 +1,4 @@
 <?php
-// Configuration de base
 error_reporting(0);
 ini_set('display_errors', 0);
 
@@ -9,10 +8,8 @@ function proxyRequest($url) {
     curl_setopt_array($ch, [
         CURLOPT_URL => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 10,
-        CURLOPT_CONNECTTIMEOUT => 30,
         CURLOPT_TIMEOUT => 30,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
@@ -21,68 +18,27 @@ function proxyRequest($url) {
             'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language: en-US,en;q=0.5',
             'Accept-Encoding: gzip, deflate',
-            'X-Forwarded-For: 104.28.42.1',
-            'Connection: keep-alive',
-            'Upgrade-Insecure-Requests: 1'
+            'X-Forwarded-For: 104.28.42.1'
         ]
     ]);
 
     $response = curl_exec($ch);
-    $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $headers = substr($response, 0, $header_size);
-    $body = substr($response, $header_size);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
     curl_close($ch);
 
-    // Injecter le bouton flottant si c'est du HTML
-    if (stripos($contentType, 'text/html') !== false) {
-        $button = <<<HTML
-        <div id="hmb-proxy-ui" style="position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;">
-            <button onclick="document.getElementById('hmb-proxy-form').style.display = document.getElementById('hmb-proxy-form').style.display === 'none' ? 'block' : 'none'"
-                    style="width: 50px; height: 50px; border-radius: 25px; background: gold; border: none; cursor: pointer; font-size: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-                🌐
-            </button>
-            <form id="hmb-proxy-form" onsubmit="event.preventDefault(); window.location.href='/proxy.php/' + (document.getElementById('hmb-proxy-url').value.startsWith('http') ? '' : 'https://') + document.getElementById('hmb-proxy-url').value;" 
-                  style="display: none; position: absolute; bottom: 60px; right: 0; background: #0D1C40; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-                <input type="text" id="hmb-proxy-url" placeholder="Entrez une URL" 
-                       style="width: 200px; padding: 5px; margin-bottom: 5px; border: 1px solid gold; background: #0D1C40; color: gold;">
-                <button type="submit" style="width: 100%; padding: 5px; background: gold; border: none; cursor: pointer;">Charger</button>
-            </form>
-        </div>
-HTML;
-        $body = str_ireplace('</body>', $button . '</body>', $body);
-    }
-
-    // Transmettre les en-têtes pertinents
-    $headerLines = explode("\n", $headers);
-    foreach ($headerLines as $line) {
-        if (preg_match('/^(?:Content-Type|Content-Language|Cache-Control|Expires|Last-Modified)/i', $line)) {
-            header(trim($line));
-        }
-    }
-
-    return $body;
+    return ['content' => $response, 'type' => $contentType];
 }
 
-// Traitement de la requête
-$requestUri = $_SERVER['REQUEST_URI'];
-$proxyPrefix = '/proxy.php/';
-
-if (strpos($requestUri, $proxyPrefix) === 0) {
-    $targetUrl = substr($requestUri, strlen($proxyPrefix));
-    
-    if (empty($targetUrl)) {
-        header('Location: /proxy.php');
-        exit;
+// Si c'est une requête AJAX pour charger une URL
+if (isset($_GET['url'])) {
+    $url = $_GET['url'];
+    if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        $url = 'https://' . $url;
     }
-
-    if (!filter_var($targetUrl, FILTER_VALIDATE_URL)) {
-        $targetUrl = 'https://' . $targetUrl;
-    }
-
     try {
-        echo proxyRequest($targetUrl);
+        $result = proxyRequest($url);
+        header('Content-Type: ' . $result['type']);
+        echo $result['content'];
     } catch (Exception $e) {
         header('HTTP/1.1 500 Internal Server Error');
         echo "Erreur: " . $e->getMessage();
@@ -90,51 +46,172 @@ if (strpos($requestUri, $proxyPrefix) === 0) {
     exit;
 }
 
-// Page d'accueil
+// Page principale
 ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HMB Tech - Proxy</title>
+    <title>HMB Tech - Browser</title>
     <style>
-        body {
+        * {
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
             background: #0D1C40;
             color: gold;
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            text-align: center;
+            padding: 20px;
         }
-        .container {
-            max-width: 600px;
+
+        .browser-container {
+            width: 390px;
+            height: 844px;
+            background: white;
+            border-radius: 45px;
+            position: relative;
+            overflow: hidden;
+            border: 3px solid gold;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
         }
-        h1 {
-            margin-bottom: 20px;
+
+        .notch {
+            width: 150px;
+            height: 30px;
+            background: #0D1C40;
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            z-index: 1000;
+        }
+
+        .browser-bar {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            right: 10px;
+            height: 40px;
+            background: rgba(13, 28, 64, 0.9);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            z-index: 1000;
+        }
+
+        .url-input {
+            flex: 1;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid gold;
+            border-radius: 5px;
+            color: gold;
+            padding: 0 10px;
+            margin-right: 10px;
+        }
+
+        .go-button {
+            background: gold;
+            color: #0D1C40;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .content-frame {
+            position: absolute;
+            top: 90px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            overflow: auto;
+        }
+
+        #proxyContent {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0D1C40;
+            font-weight: bold;
+            display: none;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>HMB Tech - Proxy</h1>
-        <p>Cliquez sur le bouton 🌐 pour commencer</p>
+    <div class="browser-container">
+        <div class="notch"></div>
+        <div class="browser-bar">
+            <input type="text" class="url-input" placeholder="Entrez une URL..." value="<?php echo isset($_GET['load']) ? htmlspecialchars($_GET['load']) : ''; ?>">
+            <button class="go-button">GO</button>
+        </div>
+        <div class="content-frame">
+            <div id="proxyContent"></div>
+            <div class="loading">Chargement...</div>
+        </div>
     </div>
-    <div id="hmb-proxy-ui" style="position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;">
-        <button onclick="document.getElementById('hmb-proxy-form').style.display = document.getElementById('hmb-proxy-form').style.display === 'none' ? 'block' : 'none'"
-                style="width: 50px; height: 50px; border-radius: 25px; background: gold; border: none; cursor: pointer; font-size: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-            🌐
-        </button>
-        <form id="hmb-proxy-form" onsubmit="event.preventDefault(); window.location.href='/proxy.php/' + (document.getElementById('hmb-proxy-url').value.startsWith('http') ? '' : 'https://') + document.getElementById('hmb-proxy-url').value;"
-              style="display: none; position: absolute; bottom: 60px; right: 0; background: #0D1C40; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-            <input type="text" id="hmb-proxy-url" placeholder="Entrez une URL"
-                   style="width: 200px; padding: 5px; margin-bottom: 5px; border: 1px solid gold; background: #0D1C40; color: gold;">
-            <button type="submit" style="width: 100%; padding: 5px; background: gold; border: none; cursor: pointer;">Charger</button>
-        </form>
-    </div>
+
+    <script>
+        const urlInput = document.querySelector('.url-input');
+        const goButton = document.querySelector('.go-button');
+        const contentDiv = document.getElementById('proxyContent');
+        const loading = document.querySelector('.loading');
+
+        async function loadUrl(url) {
+            if (!url) return;
+            
+            if (!url.startsWith('http')) {
+                url = 'https://' + url;
+            }
+
+            loading.style.display = 'block';
+            contentDiv.innerHTML = '';
+
+            try {
+                const response = await fetch(`?url=${encodeURIComponent(url)}`);
+                const content = await response.text();
+                contentDiv.innerHTML = content;
+                urlInput.value = url;
+                history.pushState({}, '', `?load=${encodeURIComponent(url)}`);
+            } catch (error) {
+                contentDiv.innerHTML = `<div style="color: red; padding: 20px;">Erreur: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        goButton.addEventListener('click', () => loadUrl(urlInput.value.trim()));
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                loadUrl(urlInput.value.trim());
+            }
+        });
+
+        // Charger l'URL initiale si présente
+        const initialUrl = new URLSearchParams(window.location.search).get('load');
+        if (initialUrl) {
+            loadUrl(initialUrl);
+        }
+    </script>
 </body>
 </html>
