@@ -10,79 +10,87 @@ header('Access-Control-Allow-Headers: *');
 
 // Fonction pour gérer le cache
 function manageCache($url) {
-    $cacheFile = 'cache.json';
-    $cache = file_exists($cacheFile) ? json_decode(file_get_contents($cacheFile), true) : [];
-    $cache[$url] = ['timestamp' => time()];
-    file_put_contents($cacheFile, json_encode($cache, JSON_PRETTY_PRINT));
+    try {
+        $cacheFile = 'cache.json';
+        $cache = file_exists($cacheFile) ? json_decode(file_get_contents($cacheFile), true) : [];
+        $cache[$url] = ['timestamp' => time()];
+        file_put_contents($cacheFile, json_encode($cache, JSON_PRETTY_PRINT));
+    } catch (Exception $e) {
+        // Silently fail if cache management fails
+    }
+}
+
+// Fonction pour suivre les redirections
+function followRedirects($url, $maxRedirects = 5) {
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => $maxRedirects,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
+        CURLOPT_HTTPHEADER => [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language: en-US,en;q=0.5',
+            'X-Forwarded-For: 104.28.42.1'
+        ],
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_ENCODING => '',
+        CURLOPT_TIMEOUT => 30
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    return [
+        'content' => $response,
+        'httpCode' => $httpCode,
+        'contentType' => $contentType,
+        'error' => $error
+    ];
 }
 
 // Traitement de la requête proxy
 if (isset($_SERVER['PATH_INFO'])) {
     $targetUrl = substr($_SERVER['PATH_INFO'], 1);
+    
     if (!empty($targetUrl)) {
-        // Configuration du contexte de la requête
-        $opts = [
-            'http' => [
-                'method' => $_SERVER['REQUEST_METHOD'],
-                'header' => [
-                    'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
-                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                    'Accept-Language: en-US,en;q=0.5',
-                    'Accept-Encoding: gzip, deflate, br',
-                    'Connection: keep-alive',
-                    'Upgrade-Insecure-Requests: 1',
-                    'Sec-Fetch-Dest: document',
-                    'Sec-Fetch-Mode: navigate',
-                    'Sec-Fetch-Site: none',
-                    'Sec-Fetch-User: ?1',
-                    'X-Forwarded-For: 104.28.42.1', // IP américaine
-                    'Cache-Control: no-cache',
-                ]
-            ],
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ]
-        ];
-
-        // Ajouter les en-têtes de la requête originale
-        if (function_exists('getallheaders')) {
-            $headers = getallheaders();
-            foreach ($headers as $header => $value) {
-                if (!in_array(strtolower($header), ['host', 'connection', 'user-agent'])) {
-                    $opts['http']['header'][] = "$header: $value";
-                }
-            }
-        }
-
-        $context = stream_context_create($opts);
-
         try {
-            // Récupérer le contenu
-            $content = @file_get_contents($targetUrl, false, $context);
-            
-            if ($content === false) {
-                throw new Exception("Erreur lors de la récupération du contenu");
+            // Vérifier l'URL
+            if (!filter_var($targetUrl, FILTER_VALIDATE_URL)) {
+                throw new Exception("URL invalide");
             }
 
-            // Récupérer les en-têtes de réponse
-            $responseHeaders = $http_response_header ?? [];
-            
-            // Transmettre les en-têtes pertinents
-            foreach ($responseHeaders as $header) {
-                if (!preg_match('/^(Transfer-Encoding|Connection|Keep-Alive|Host)/i', $header)) {
-                    header($header);
-                }
+            // Récupérer le contenu avec cURL
+            $result = followRedirects($targetUrl);
+
+            if ($result['error']) {
+                throw new Exception("Erreur cURL: " . $result['error']);
+            }
+
+            if ($result['httpCode'] >= 400) {
+                throw new Exception("Erreur HTTP " . $result['httpCode']);
+            }
+
+            // Définir les en-têtes de réponse
+            if ($result['contentType']) {
+                header('Content-Type: ' . $result['contentType']);
             }
 
             // Enregistrer dans le cache
             manageCache($targetUrl);
 
             // Retourner le contenu
-            echo $content;
+            echo $result['content'];
             exit;
+
         } catch (Exception $e) {
             header('HTTP/1.1 500 Internal Server Error');
+            header('Content-Type: application/json');
             echo json_encode(['error' => $e->getMessage()]);
             exit;
         }
@@ -109,6 +117,7 @@ if (isset($_SERVER['PATH_INFO'])) {
             background: var(--primary-bg);
             color: var(--primary-color);
             font-family: Arial, sans-serif;
+            min-height: 100vh;
         }
 
         #proxyButton {
@@ -126,6 +135,9 @@ if (isset($_SERVER['PATH_INFO'])) {
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
             transition: transform 0.3s ease;
             z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #proxyButton:hover {
@@ -142,6 +154,7 @@ if (isset($_SERVER['PATH_INFO'])) {
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
             display: none;
             z-index: 1000;
+            backdrop-filter: blur(10px);
         }
 
         #urlInput {
@@ -168,10 +181,25 @@ if (isset($_SERVER['PATH_INFO'])) {
             cursor: pointer;
             font-weight: bold;
             width: 100%;
+            transition: all 0.3s ease;
         }
 
         #submitUrl:hover {
             opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        #error {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff4444;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            display: none;
+            z-index: 1001;
         }
 
         @media (max-width: 480px) {
@@ -188,17 +216,32 @@ if (isset($_SERVER['PATH_INFO'])) {
     </style>
 </head>
 <body>
-    <button id="proxyButton">🌐</button>
+    <button id="proxyButton" title="Ouvrir le proxy">🌐</button>
     <form id="urlForm">
-        <input type="url" id="urlInput" placeholder="Entrez l'URL à charger..." required>
+        <input type="url" 
+               id="urlInput" 
+               placeholder="Entrez l'URL à charger... (ex: https://meta.ai)" 
+               required 
+               pattern="https?://.+"
+               title="L'URL doit commencer par http:// ou https://">
         <button type="submit" id="submitUrl">Charger</button>
     </form>
+    <div id="error"></div>
 
     <script>
         const button = document.getElementById('proxyButton');
         const form = document.getElementById('urlForm');
         const input = document.getElementById('urlInput');
+        const error = document.getElementById('error');
         let isFormVisible = false;
+
+        function showError(message) {
+            error.textContent = message;
+            error.style.display = 'block';
+            setTimeout(() => {
+                error.style.display = 'none';
+            }, 5000);
+        }
 
         button.addEventListener('click', () => {
             isFormVisible = !isFormVisible;
@@ -219,14 +262,26 @@ if (isset($_SERVER['PATH_INFO'])) {
             e.preventDefault();
             let url = input.value.trim();
             
-            // Ajouter le protocole si manquant
-            if (!/^https?:\/\//i.test(url)) {
-                url = 'https://' + url;
+            try {
+                // Valider l'URL
+                if (!/^https?:\/\//i.test(url)) {
+                    url = 'https://' + url;
+                }
+                
+                new URL(url); // Valider le format de l'URL
+                
+                // Rediriger vers l'URL via le proxy
+                window.location.href = `/proxy.php/${url}`;
+            } catch (err) {
+                showError('URL invalide. Veuillez entrer une URL valide.');
             }
-
-            // Rediriger vers l'URL via le proxy
-            window.location.href = `/proxy.php/${url}`;
         });
+
+        // Gestion des erreurs globales
+        window.onerror = function(msg, url, line) {
+            showError('Une erreur est survenue. Veuillez réessayer.');
+            return false;
+        };
     </script>
 </body>
 </html>
