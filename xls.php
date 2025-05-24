@@ -4,7 +4,7 @@ require 'vendor/autoload.php';
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 $search = $_GET['search'] ?? '';
-$url = "https://tonlien.com/fichier.xlsx"; // Remplace par ton vrai lien
+$url = "https://raw.githubusercontent.com/HansHugoHMB/Accueil/main/data.xlsx"; // Remplace par ton vrai lien
 $tempFile = 'temp.xlsx';
 file_put_contents($tempFile, file_get_contents($url));
 
