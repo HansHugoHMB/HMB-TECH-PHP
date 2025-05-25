@@ -22,12 +22,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mail->isSMTP();
             $mail->Host = 'smtp.gmail.com';
             $mail->SMTPAuth = true;
-            $mail->Username = 'hansmbaya@gmail.com';
-            $mail->Password = 'fwnh etlc yequ suzy'; // mot de passe d’application
+            $mail->Username = 'hmb05092006@gmail.com';
+            $mail->Password = 'z u o p m w n k i e e m d g x y'; // mot de passe d’application
             $mail->SMTPSecure = 'ssl';
             $mail->Port = 465;
 
-            $mail->setFrom('hansmbaya@gmail.com', 'Hans Mbaya Newsletter');
+            $mail->setFrom('hmb05092006@gmail.com', 'Hans Mbaya Newsletter');
             $mail->addAddress($email);
             $mail->Subject = "Confirmation d'abonnement";
             $mail->Body = "Merci pour ton inscription à la newsletter de Hans Mbaya !";
