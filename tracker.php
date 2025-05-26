@@ -7,11 +7,13 @@ require 'Mobile_Detect.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+// En-têtes CORS pour permettre l'accès depuis vos domaines
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET');
+header('Access-Control-Allow-Methods: GET, POST');
 header('Access-Control-Allow-Headers: Content-Type');
+header('Content-Type: application/json');
 
-class VisitorTracker {
+class HMBTechTracker {
     private $config = [
         'smtp_host' => 'smtp.gmail.com',
         'smtp_port' => 465,
@@ -19,7 +21,12 @@ class VisitorTracker {
         'smtp_username' => 'hmb05092006@gmail.com',
         'smtp_password' => 'z u o p m w n k i e e m d g x y',
         'to_email' => 'mbayahans@gmail.com',
-        'from_name' => 'HMB Tech Tracker'
+        'from_name' => 'HMB Tech Tracker',
+        'allowed_domains' => [
+            'hmb-tech-x.pages.dev',
+            'hmb-tech',
+            'localhost'
+        ]
     ];
 
     private $ipInfo;
@@ -28,9 +35,11 @@ class VisitorTracker {
     private $browserInfo;
     private $locationInfo;
     private $detect;
+    private $visitTime;
 
     public function __construct() {
         $this->detect = new Mobile_Detect;
+        $this->visitTime = date('Y-m-d H:i:s');
         $this->initializeData();
     }
 
@@ -42,134 +51,166 @@ class VisitorTracker {
         $this->locationInfo = $this->getLocationInfo();
     }
 
-    private function getIpInfo() {
-        $ip = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? 
-              explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0] : 
-              $_SERVER['REMOTE_ADDR'];
+    private function getIP() {
+        $ip_headers = [
+            'HTTP_CF_CONNECTING_IP', // Cloudflare
+            'HTTP_CLIENT_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_X_FORWARDED',
+            'HTTP_FORWARDED_FOR',
+            'HTTP_FORWARDED',
+            'REMOTE_ADDR'
+        ];
 
-        $ch = curl_init("http://ip-api.com/json/{$ip}?fields=status,message,continent,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,currency,isp,org,as,asname,reverse,mobile,proxy,hosting,query");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        $response = curl_exec($ch);
-        
-        if(curl_errno($ch)) {
-            error_log('Erreur Curl: ' . curl_error($ch));
-        }
-        
-        curl_close($ch);
-        $data = json_decode($response, true);
-        
-        return $data ?: [];
-    }
-
-    private function getDeviceInfo() {
-        $deviceInfo = [];
-        
-        // Type d'appareil avec Mobile_Detect
-        if($this->detect->isMobile()) {
-            if($this->detect->isTablet()) {
-                $deviceInfo['type'] = 'Tablette';
-            } else {
-                $deviceInfo['type'] = 'Mobile';
-            }
-        } else {
-            $deviceInfo['type'] = 'Desktop';
-        }
-
-        // Détection détaillée du device
-        if($this->detect->isAndroidOS()) {
-            $deviceInfo['platform'] = 'Android';
-        } elseif($this->detect->isiOS()) {
-            $deviceInfo['platform'] = 'iOS';
-        } else {
-            $deviceInfo['platform'] = $this->getOS();
-        }
-
-        // Marque spécifique pour mobile
-        if($this->detect->isMobile()) {
-            foreach([
-                'iPhone', 'iPad', 'Samsung', 'Huawei', 'Xiaomi', 
-                'OnePlus', 'LG', 'Sony', 'Motorola', 'Nokia'
-            ] as $brand) {
-                if($this->detect->is($brand)) {
-                    $deviceInfo['brand'] = $brand;
-                    break;
+        foreach ($ip_headers as $header) {
+            if (isset($_SERVER[$header])) {
+                $ip = $_SERVER[$header];
+                if (strpos($ip, ',') !== false) {
+                    $ips = explode(',', $ip);
+                    $ip = trim($ips[0]);
+                }
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
                 }
             }
         }
-
-        if(!isset($deviceInfo['brand'])) {
-            $deviceInfo['brand'] = 'Non identifié';
-        }
-
-        return $deviceInfo;
+        return $_SERVER['REMOTE_ADDR'] ?? 'IP inconnue';
     }
 
-    private function getOS() {
-        $os_array = [
-            '/windows nt 10/i'      => 'Windows 10',
-            '/windows nt 6.3/i'     => 'Windows 8.1',
-            '/windows nt 6.2/i'     => 'Windows 8',
-            '/windows nt 6.1/i'     => 'Windows 7',
-            '/windows nt 6.0/i'     => 'Windows Vista',
-            '/macintosh|mac os x/i' => 'macOS',
-            '/mac_powerpc/i'        => 'Mac OS 9',
-            '/linux/i'              => 'Linux',
-            '/ubuntu/i'             => 'Ubuntu',
-            '/iphone/i'             => 'iPhone',
-            '/ipod/i'               => 'iPod',
-            '/ipad/i'               => 'iPad',
-            '/android/i'            => 'Android',
-            '/webos/i'              => 'Mobile'
-        ];
+    private function getIpInfo() {
+        $ip = $this->getIP();
+        
+        // Premier essai avec ip-api.com
+        $url = "http://ip-api.com/json/{$ip}?fields=status,message,continent,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,currency,isp,org,as,asname,reverse,mobile,proxy,hosting,query";
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        
+        $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-        $userAgent = $_SERVER['HTTP_USER_AGENT'];
-        foreach ($os_array as $regex => $value) {
-            if (preg_match($regex, $userAgent)) {
-                return $value;
+        if ($status === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data && isset($data['status']) && $data['status'] === 'success') {
+                $data['detected_ip'] = $ip;
+                return $data;
             }
         }
-        return 'Système inconnu';
+
+        // Fallback avec ipapi.co
+        return [
+            'detected_ip' => $ip,
+            'country' => 'Non disponible',
+            'city' => 'Non disponible',
+            'isp' => 'Non disponible'
+        ];
+    }
+
+    private function getDeviceInfo() {
+        $device = [
+            'type' => $this->detect->isMobile() ? 
+                     ($this->detect->isTablet() ? 'Tablette' : 'Mobile') : 
+                     'Desktop',
+            'platform' => $this->getPlatform(),
+            'brand' => $this->getBrand(),
+            'model' => $this->getModel(),
+            'screen_resolution' => $_SERVER['HTTP_SEC_CH_UA_PLATFORM_VERSION'] ?? 'Non disponible'
+        ];
+
+        error_log("Device Info: " . print_r($device, true));
+        return $device;
+    }
+
+    private function getPlatform() {
+        if ($this->detect->isiOS()) return 'iOS';
+        if ($this->detect->isAndroidOS()) return 'Android';
+        
+        $platforms = [
+            '/windows/i' => 'Windows',
+            '/macintosh|mac os x/i' => 'macOS',
+            '/linux/i' => 'Linux',
+            '/ubuntu/i' => 'Ubuntu'
+        ];
+
+        foreach ($platforms as $regex => $platform) {
+            if (preg_match($regex, $_SERVER['HTTP_USER_AGENT'])) {
+                return $platform;
+            }
+        }
+        
+        return 'Plateforme inconnue';
+    }
+
+    private function getBrand() {
+        $brands = [
+            'iPhone' => 'Apple',
+            'iPad' => 'Apple',
+            'Samsung' => 'Samsung',
+            'Huawei' => 'Huawei',
+            'Xiaomi' => 'Xiaomi',
+            'OPPO' => 'OPPO',
+            'OnePlus' => 'OnePlus',
+            'LG' => 'LG',
+            'Sony' => 'Sony',
+            'Nokia' => 'Nokia'
+        ];
+
+        foreach ($brands as $key => $brand) {
+            if ($this->detect->is($key)) {
+                return $brand;
+            }
+        }
+
+        return $this->detect->isMobile() ? 'Autre mobile' : 'PC/Mac';
+    }
+
+    private function getModel() {
+        $ua = $_SERVER['HTTP_USER_AGENT'];
+        preg_match('/(iPhone|iPad|Android|Windows Phone|Tablet|Mobile)[\s\/]+([\d.]+)/', $ua, $matches);
+        return $matches[1] ?? ($this->detect->isMobile() ? 'Mobile inconnu' : 'Desktop');
     }
 
     private function getNetworkInfo() {
         return [
             'isp' => $this->ipInfo['isp'] ?? 'Non disponible',
-            'asn' => $this->ipInfo['as'] ?? 'Non disponible',
-            'org' => $this->ipInfo['org'] ?? 'Non disponible',
-            'proxy' => ($this->ipInfo['proxy'] ?? false) ? 'Oui' : 'Non',
-            'hosting' => ($this->ipInfo['hosting'] ?? false) ? 'Oui' : 'Non',
-            'mobile_network' => ($this->ipInfo['mobile'] ?? false) ? 'Oui' : 'Non',
-            'connection_type' => $this->detect->isMobile() ? 'Mobile' : 'Fixe'
+            'as' => $this->ipInfo['as'] ?? 'Non disponible',
+            'organization' => $this->ipInfo['org'] ?? 'Non disponible',
+            'connection_type' => $this->detect->isMobile() ? 'Mobile' : 'Fixe',
+            'proxy_detected' => $this->ipInfo['proxy'] ?? false ? 'Oui' : 'Non',
+            'vpn_detected' => $this->ipInfo['hosting'] ?? false ? 'Possible' : 'Non détecté'
         ];
     }
 
     private function getBrowserInfo() {
-        $browserInfo = [];
         $ua = $_SERVER['HTTP_USER_AGENT'];
+        $browser_name = 'Inconnu';
+        $version = '';
 
-        // Détection du navigateur
-        if (strpos($ua, 'Firefox') !== false) {
-            $browserInfo['name'] = 'Firefox';
-        } elseif (strpos($ua, 'Chrome') !== false && strpos($ua, 'Edg') === false) {
-            $browserInfo['name'] = 'Chrome';
-        } elseif (strpos($ua, 'Safari') !== false && strpos($ua, 'Chrome') === false) {
-            $browserInfo['name'] = 'Safari';
-        } elseif (strpos($ua, 'Edg') !== false) {
-            $browserInfo['name'] = 'Edge';
-        } else {
-            $browserInfo['name'] = 'Autre';
+        if (preg_match('/Firefox\/([0-9.]+)/', $ua, $matches)) {
+            $browser_name = 'Firefox';
+            $version = $matches[1];
+        } elseif (preg_match('/Chrome\/([0-9.]+)/', $ua, $matches)) {
+            $browser_name = 'Chrome';
+            $version = $matches[1];
+        } elseif (preg_match('/Safari\/([0-9.]+)/', $ua, $matches)) {
+            $browser_name = 'Safari';
+            $version = $matches[1];
+        } elseif (preg_match('/Edge\/([0-9.]+)/', $ua, $matches)) {
+            $browser_name = 'Edge';
+            $version = $matches[1];
         }
 
-        // Version du navigateur
-        preg_match('/' . $browserInfo['name'] . '\/([0-9.]+)/', $ua, $matches);
-        $browserInfo['version'] = isset($matches[1]) ? $matches[1] : 'Version inconnue';
-
-        $browserInfo['language'] = substr($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'fr', 0, 2);
-        $browserInfo['cookies_enabled'] = isset($_COOKIE) ? 'Oui' : 'Non';
-        $browserInfo['user_agent'] = $ua;
-
-        return $browserInfo;
+        return [
+            'name' => $browser_name,
+            'version' => $version,
+            'language' => substr($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'fr', 0, 2),
+            'user_agent' => $ua,
+            'cookies_enabled' => isset($_COOKIE) ? 'Oui' : 'Non'
+        ];
     }
 
     private function getLocationInfo() {
@@ -180,9 +221,7 @@ class VisitorTracker {
             'code_postal' => $this->ipInfo['zip'] ?? 'Non disponible',
             'latitude' => $this->ipInfo['lat'] ?? 'Non disponible',
             'longitude' => $this->ipInfo['lon'] ?? 'Non disponible',
-            'timezone' => $this->ipInfo['timezone'] ?? 'Non disponible',
-            'fuseau_horaire' => date('P'),
-            'heure_locale' => date('H:i:s')
+            'timezone' => $this->ipInfo['timezone'] ?? 'Non disponible'
         ];
     }
 
@@ -204,22 +243,20 @@ class VisitorTracker {
 
             $referer = isset($_SERVER['HTTP_REFERER']) ? parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) : 'Accès Direct';
             $mail->Subject = "🌟 Nouvelle visite sur {$referer}";
-
             $mail->Body = $this->generateEmailBody();
-            $mail->send();
 
+            $mail->send();
             $this->logVisit();
-            echo json_encode(['status' => 'success']);
+
+            return ['status' => 'success', 'message' => 'Visite enregistrée'];
 
         } catch (Exception $e) {
-            error_log("Erreur d'envoi: {$e->getMessage()}");
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+            error_log("Erreur d'envoi email: " . $e->getMessage());
+            return ['status' => 'error', 'message' => $e->getMessage()];
         }
     }
 
     private function generateEmailBody() {
-        // Le même style que précédemment avec les sections pour appareil, localisation, réseau et navigateur
-        // [Code du template HTML précédent]
         return "
         <html>
         <head>
@@ -257,22 +294,57 @@ class VisitorTracker {
                     gap: 10px;
                 }
                 .data-item {
-                    padding: 5px;
+                    padding: 8px;
                     background: rgba(255,215,0,0.1);
                     border-radius: 3px;
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                    padding: 20px;
+                    border-bottom: 2px solid gold;
+                }
+                .footer {
+                    text-align: center;
+                    margin-top: 20px;
+                    padding: 10px;
+                    border-top: 2px solid gold;
+                    font-size: 12px;
                 }
             </style>
         </head>
         <body>
             <div class='container'>
-                <h1>🌟 Nouvelle Visite Détectée 🌟</h1>
-                
+                <div class='header'>
+                    <h1>🌟 Nouvelle Visite HMB Tech 🌟</h1>
+                    <p>Détectée le {$this->visitTime}</p>
+                </div>
+
+                <div class='section'>
+                    <div class='section-title'>🌐 Informations IP</div>
+                    <div class='data-grid'>
+                        <div class='data-item'>
+                            <strong>IP:</strong> {$this->ipInfo['detected_ip']}
+                        </div>
+                        <div class='data-item'>
+                            <strong>FAI:</strong> {$this->networkInfo['isp']}
+                        </div>
+                        <div class='data-item'>
+                            <strong>Proxy:</strong> {$this->networkInfo['proxy_detected']}
+                        </div>
+                        <div class='data-item'>
+                            <strong>VPN:</strong> {$this->networkInfo['vpn_detected']}
+                        </div>
+                    </div>
+                </div>
+
                 <div class='section'>
                     <div class='section-title'>📱 Appareil</div>
                     <div class='data-grid'>
                         <div class='data-item'>Type: {$this->deviceInfo['type']}</div>
                         <div class='data-item'>Marque: {$this->deviceInfo['brand']}</div>
-                        <div class='data-item'>Plateforme: {$this->deviceInfo['platform']}</div>
+                        <div class='data-item'>Modèle: {$this->deviceInfo['model']}</div>
+                        <div class='data-item'>OS: {$this->deviceInfo['platform']}</div>
                     </div>
                 </div>
 
@@ -287,16 +359,6 @@ class VisitorTracker {
                 </div>
 
                 <div class='section'>
-                    <div class='section-title'>🌐 Réseau</div>
-                    <div class='data-grid'>
-                        <div class='data-item'>FAI: {$this->networkInfo['isp']}</div>
-                        <div class='data-item'>Type: {$this->networkInfo['connection_type']}</div>
-                        <div class='data-item'>Proxy: {$this->networkInfo['proxy']}</div>
-                        <div class='data-item'>Réseau Mobile: {$this->networkInfo['mobile_network']}</div>
-                    </div>
-                </div>
-
-                <div class='section'>
                     <div class='section-title'>🔍 Navigateur</div>
                     <div class='data-grid'>
                         <div class='data-item'>Nom: {$this->browserInfo['name']}</div>
@@ -305,26 +367,35 @@ class VisitorTracker {
                         <div class='data-item'>Cookies: {$this->browserInfo['cookies_enabled']}</div>
                     </div>
                 </div>
+
+                <div class='footer'>
+                    © " . date('Y') . " HMB Tech - Système de tracking avancé<br>
+                    Développé par Hans Hugo
+                </div>
             </div>
         </body>
         </html>";
     }
 
     private function logVisit() {
-        $logData = [
-            'date' => date('Y-m-d H:i:s'),
-            'ip' => $this->ipInfo['query'] ?? 'Unknown',
-            'device' => $this->deviceInfo['type'],
-            'location' => "{$this->locationInfo['ville']}, {$this->locationInfo['pays']}",
-            'browser' => $this->browserInfo['name']
+        $log_data = [
+            'timestamp' => $this->visitTime,
+            'ip' => $this->ipInfo['detected_ip'],
+            'pays' => $this->locationInfo['pays'],
+            'ville' => $this->locationInfo['ville'],
+            'appareil' => $this->deviceInfo['type'],
+            'navigateur' => $this->browserInfo['name']
         ];
 
-        $logLine = implode(' | ', $logData) . "\n";
-        file_put_contents('visits.log', $logLine, FILE_APPEND);
+        $log_line = implode(' | ', $log_data) . "\n";
+        file_put_contents('visits.log', $log_line, FILE_APPEND);
     }
 }
 
 // Exécution
-$tracker = new VisitorTracker();
-$tracker->sendTrackingEmail();
+$tracker = new HMBTechTracker();
+$result = $tracker->sendTrackingEmail();
+
+// Réponse JSON
+echo json_encode($result);
 ?>
