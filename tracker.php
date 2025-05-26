@@ -1,15 +1,13 @@
 <?php
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type, Accept');
-header('Content-Type: application/json');
+// En-têtes de sécurité
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
 
-// Log pour debug
-error_log("Requête reçue: " . file_get_contents("php://input"));
-
+// Configuration PHPMailer
+require 'phpmailer/src/Exception.php';
 require 'phpmailer/src/PHPMailer.php';
 require 'phpmailer/src/SMTP.php';
-require 'phpmailer/src/Exception.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -22,28 +20,42 @@ $config = [
     'smtp_username' => 'hmb05092006@gmail.com',
     'smtp_password' => 'z u o p m w n k i e e m d g x y',
     'to_email' => 'mbayahans@gmail.com',
-    'from_name' => 'HMB Tech Tracker'
+    'from_name' => 'HMB Tech Tracker',
+    'allowed_domains' => [
+        'hmb-tech-x.pages.dev',
+        'hmb-tech'  // Pour matcher tous les domaines contenant hmb-tech
+    ]
 ];
 
+// Vérifier si le domaine est autorisé
+$referer = isset($_SERVER['HTTP_REFERER']) ? parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) : '';
+$isAllowedDomain = false;
+
+foreach ($config['allowed_domains'] as $domain) {
+    if (strpos($referer, $domain) !== false) {
+        $isAllowedDomain = true;
+        break;
+    }
+}
+
+if (!$isAllowedDomain) {
+    exit('Accès non autorisé');
+}
+
+// Fonction pour obtenir les informations de localisation
+function getIpInfo() {
+    $ip = $_SERVER['REMOTE_ADDR'];
+    $response = file_get_contents("http://ip-api.com/json/{$ip}");
+    $data = json_decode($response, true);
+    return $data ?: ['status' => 'fail'];
+}
+
 try {
-    // Lecture des données
-    $input = json_decode(file_get_contents("php://input"), true);
+    // Collecter les informations
+    $ipInfo = getIpInfo();
+    $currentTime = date('Y-m-d H:i:s');
     
-    if (!$input) {
-        error_log("Erreur de décodage JSON: " . json_last_error_msg());
-        throw new Exception('Données JSON invalides: ' . json_last_error_msg());
-    }
-
-    // Vérification des champs requis
-    $required_fields = ['ip', 'country', 'region', 'city', 'lat', 'lon', 'isp', 'ua', 'time'];
-    $missing_fields = array_diff($required_fields, array_keys($input));
-    
-    if (!empty($missing_fields)) {
-        error_log("Champs manquants: " . implode(', ', $missing_fields));
-        throw new Exception('Champs manquants: ' . implode(', ', $missing_fields));
-    }
-
-    // Configuration de PHPMailer
+    // Créer PHPMailer
     $mail = new PHPMailer(true);
     $mail->isSMTP();
     $mail->Host = $config['smtp_host'];
@@ -52,109 +64,116 @@ try {
     $mail->Password = $config['smtp_password'];
     $mail->SMTPSecure = $config['smtp_secure'];
     $mail->Port = $config['smtp_port'];
+    $mail->CharSet = 'UTF-8';
 
-    // Configuration de l'email
     $mail->setFrom($config['smtp_username'], $config['from_name']);
     $mail->addAddress($config['to_email']);
     $mail->isHTML(true);
-    $mail->CharSet = 'UTF-8';
+    
+    // Sujet personnalisé avec le nom du site
+    $siteName = $referer ?: 'Site HMB Tech';
+    $mail->Subject = "🌟 Nouvelle visite sur {$siteName}";
 
-    // Contenu de l'email avec le nouveau design
-    $mail->Subject = '🌟 Nouvelle Visite - HMB Tech';
+    // Corps de l'email
     $mail->Body = "
     <html>
     <head>
         <style>
-            body {
-                font-family: 'Arial', sans-serif;
-                margin: 0;
-                padding: 0;
-                background-color: #f5f5f5;
-            }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
             .container {
                 max-width: 600px;
-                margin: 20px auto;
-                background-color: #0D1C49;
-                border-radius: 10px;
-                overflow: hidden;
-                box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            }
-            .header {
-                background-color: #0D1C49;
+                margin: 0 auto;
+                background: #0D1C49;
                 color: gold;
                 padding: 20px;
-                text-align: center;
-                border-bottom: 2px solid gold;
-            }
-            .content {
-                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             }
             table {
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 20px;
-                background-color: #0D1C49;
-                color: gold;
             }
             th, td {
                 padding: 12px;
                 text-align: left;
                 border-bottom: 1px solid rgba(255,215,0,0.3);
             }
-            th {
-                background-color: rgba(255,215,0,0.1);
-                font-weight: bold;
+            th { background-color: rgba(255,215,0,0.1); }
+            .header {
+                text-align: center;
+                margin-bottom: 20px;
+                border-bottom: 2px solid gold;
+                padding-bottom: 10px;
             }
             .footer {
                 text-align: center;
-                padding: 15px;
-                color: gold;
+                margin-top: 20px;
                 font-size: 12px;
                 border-top: 2px solid gold;
+                padding-top: 10px;
             }
         </style>
     </head>
     <body>
         <div class='container'>
             <div class='header'>
-                <h1>🌟 HMB Tech Tracker 🌟</h1>
-                <p>Nouvelle visite détectée sur votre site</p>
+                <h1>🌟 Nouvelle visite sur {$siteName} 🌟</h1>
             </div>
-            <div class='content'>
-                <table>
-                    <tr><th>IP</th><td>{$input['ip']}</td></tr>
-                    <tr><th>Pays</th><td>{$input['country']}</td></tr>
-                    <tr><th>Région</th><td>{$input['region']}</td></tr>
-                    <tr><th>Ville</th><td>{$input['city']}</td></tr>
-                    <tr><th>Latitude</th><td>{$input['lat']}</td></tr>
-                    <tr><th>Longitude</th><td>{$input['lon']}</td></tr>
-                    <tr><th>FAI</th><td>{$input['isp']}</td></tr>
-                    <tr><th>Navigateur</th><td>{$input['ua']}</td></tr>
-                    <tr><th>Date</th><td>{$input['time']}</td></tr>
-                </table>
-            </div>
+            
+            <table>
+                <tr>
+                    <th>Site</th>
+                    <td>" . htmlspecialchars($referer) . "</td>
+                </tr>
+                <tr>
+                    <th>Date et Heure</th>
+                    <td>" . htmlspecialchars($currentTime) . "</td>
+                </tr>
+                <tr>
+                    <th>IP</th>
+                    <td>" . htmlspecialchars($ipInfo['query'] ?? 'Non disponible') . "</td>
+                </tr>
+                <tr>
+                    <th>Pays</th>
+                    <td>" . htmlspecialchars($ipInfo['country'] ?? 'Non disponible') . "</td>
+                </tr>
+                <tr>
+                    <th>Ville</th>
+                    <td>" . htmlspecialchars($ipInfo['city'] ?? 'Non disponible') . "</td>
+                </tr>
+                <tr>
+                    <th>FAI</th>
+                    <td>" . htmlspecialchars($ipInfo['isp'] ?? 'Non disponible') . "</td>
+                </tr>
+                <tr>
+                    <th>User Agent</th>
+                    <td>" . htmlspecialchars($_SERVER['HTTP_USER_AGENT']) . "</td>
+                </tr>
+            </table>
+
             <div class='footer'>
-                © " . date('Y') . " HMB Tech - Système de Tracking
+                © " . date('Y') . " HMB Tech - Système de tracking
             </div>
         </div>
     </body>
     </html>";
 
-    // Envoi de l'email
+    // Envoyer l'email
     $mail->send();
 
-    // Réponse au client
-    echo json_encode([
-        'status' => 'success',
-        'message' => 'Notification envoyée'
-    ]);
+    // Log la visite
+    $logMessage = sprintf(
+        "[%s] Visite depuis %s - IP: %s\n",
+        $currentTime,
+        $referer,
+        $ipInfo['query'] ?? 'Unknown'
+    );
+    error_log($logMessage, 3, 'visits.log');
 
 } catch (Exception $e) {
-    error_log("Erreur: " . $e->getMessage());
-    http_response_code(500);
-    echo json_encode([
-        'status' => 'error',
-        'message' => $e->getMessage()
-    ]);
+    error_log("Erreur de tracking: " . $e->getMessage());
 }
+
+// Ne rien afficher pour ne pas interférer avec le site d'origine
 ?>
