@@ -1,8 +1,11 @@
 <?php
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
 header('Content-Type: application/json');
+
+// Log pour debug
+error_log("Requête reçue: " . file_get_contents("php://input"));
 
 require 'phpmailer/src/PHPMailer.php';
 require 'phpmailer/src/SMTP.php';
@@ -22,8 +25,43 @@ $config = [
     'from_name' => 'HMB Tech Tracker'
 ];
 
-function formatMessage($data) {
-    return "
+try {
+    // Lecture des données
+    $input = json_decode(file_get_contents("php://input"), true);
+    
+    if (!$input) {
+        error_log("Erreur de décodage JSON: " . json_last_error_msg());
+        throw new Exception('Données JSON invalides: ' . json_last_error_msg());
+    }
+
+    // Vérification des champs requis
+    $required_fields = ['ip', 'country', 'region', 'city', 'lat', 'lon', 'isp', 'ua', 'time'];
+    $missing_fields = array_diff($required_fields, array_keys($input));
+    
+    if (!empty($missing_fields)) {
+        error_log("Champs manquants: " . implode(', ', $missing_fields));
+        throw new Exception('Champs manquants: ' . implode(', ', $missing_fields));
+    }
+
+    // Configuration de PHPMailer
+    $mail = new PHPMailer(true);
+    $mail->isSMTP();
+    $mail->Host = $config['smtp_host'];
+    $mail->SMTPAuth = true;
+    $mail->Username = $config['smtp_username'];
+    $mail->Password = $config['smtp_password'];
+    $mail->SMTPSecure = $config['smtp_secure'];
+    $mail->Port = $config['smtp_port'];
+
+    // Configuration de l'email
+    $mail->setFrom($config['smtp_username'], $config['from_name']);
+    $mail->addAddress($config['to_email']);
+    $mail->isHTML(true);
+    $mail->CharSet = 'UTF-8';
+
+    // Contenu de l'email avec le nouveau design
+    $mail->Subject = '🌟 Nouvelle Visite - HMB Tech';
+    $mail->Body = "
     <html>
     <head>
         <style>
@@ -84,42 +122,15 @@ function formatMessage($data) {
             </div>
             <div class='content'>
                 <table>
-                    <tr>
-                        <th>Adresse IP</th>
-                        <td>{$data['ip']}</td>
-                    </tr>
-                    <tr>
-                        <th>Pays</th>
-                        <td>{$data['country']}</td>
-                    </tr>
-                    <tr>
-                        <th>Région</th>
-                        <td>{$data['region']}</td>
-                    </tr>
-                    <tr>
-                        <th>Ville</th>
-                        <td>{$data['city']}</td>
-                    </tr>
-                    <tr>
-                        <th>Latitude</th>
-                        <td>{$data['lat']}</td>
-                    </tr>
-                    <tr>
-                        <th>Longitude</th>
-                        <td>{$data['lon']}</td>
-                    </tr>
-                    <tr>
-                        <th>FAI</th>
-                        <td>{$data['isp']}</td>
-                    </tr>
-                    <tr>
-                        <th>Navigateur</th>
-                        <td>{$data['ua']}</td>
-                    </tr>
-                    <tr>
-                        <th>Date et Heure</th>
-                        <td>{$data['time']}</td>
-                    </tr>
+                    <tr><th>IP</th><td>{$input['ip']}</td></tr>
+                    <tr><th>Pays</th><td>{$input['country']}</td></tr>
+                    <tr><th>Région</th><td>{$input['region']}</td></tr>
+                    <tr><th>Ville</th><td>{$input['city']}</td></tr>
+                    <tr><th>Latitude</th><td>{$input['lat']}</td></tr>
+                    <tr><th>Longitude</th><td>{$input['lon']}</td></tr>
+                    <tr><th>FAI</th><td>{$input['isp']}</td></tr>
+                    <tr><th>Navigateur</th><td>{$input['ua']}</td></tr>
+                    <tr><th>Date</th><td>{$input['time']}</td></tr>
                 </table>
             </div>
             <div class='footer'>
@@ -128,41 +139,6 @@ function formatMessage($data) {
         </div>
     </body>
     </html>";
-}
-
-try {
-    // Lecture des données
-    $rawInput = file_get_contents("php://input");
-    $input = json_decode($rawInput, true);
-    
-    if (!$input) {
-        throw new Exception('Données JSON invalides');
-    }
-
-    // Configuration de PHPMailer
-    $mail = new PHPMailer(true);
-    $mail->isSMTP();
-    $mail->Host = $config['smtp_host'];
-    $mail->SMTPAuth = true;
-    $mail->Username = $config['smtp_username'];
-    $mail->Password = $config['smtp_password'];
-    $mail->SMTPSecure = $config['smtp_secure'];
-    $mail->Port = $config['smtp_port'];
-
-    // Configuration de l'email
-    $mail->setFrom($config['smtp_username'], $config['from_name']);
-    $mail->addAddress($config['to_email']);
-    $mail->isHTML(true);
-    $mail->CharSet = 'UTF-8';
-
-    // Contenu de l'email
-    $mail->Subject = '🌟 Nouvelle Visite - HMB Tech';
-    $mail->Body = formatMessage($input);
-    $mail->AltBody = "Nouvelle visite détectée\n\n" . 
-                     "IP: {$input['ip']}\n" .
-                     "Pays: {$input['country']}\n" .
-                     "Ville: {$input['city']}\n" .
-                     "Date: {$input['time']}";
 
     // Envoi de l'email
     $mail->send();
@@ -174,6 +150,7 @@ try {
     ]);
 
 } catch (Exception $e) {
+    error_log("Erreur: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'status' => 'error',
