@@ -11,67 +11,133 @@ require 'phpmailer/src/Exception.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-// Configuration (à mettre dans un fichier .env)
+// Configuration
 $config = [
     'smtp_host' => 'smtp.gmail.com',
     'smtp_port' => 465,
     'smtp_secure' => 'ssl',
-    'smtp_username' => getenv('SMTP_USERNAME') ?: 'hmb05092006@gmail.com',
-    'smtp_password' => getenv('SMTP_PASSWORD'), // À définir dans les variables d'environnement
-    'to_email' => getenv('TO_EMAIL') ?: 'mbayahans@gmail.com',
+    'smtp_username' => 'hmb05092006@gmail.com',
+    'smtp_password' => 'z u o p m w n k i e e m d g x y',
+    'to_email' => 'mbayahans@gmail.com',
     'from_name' => 'HMB Tech Tracker'
 ];
 
-// Fonction pour valider les données reçues
-function validateData($data) {
-    $required = ['ip', 'country', 'region', 'city', 'lat', 'lon', 'isp', 'ua', 'time'];
-    foreach ($required as $field) {
-        if (!isset($data[$field])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Fonction pour formater le message HTML
 function formatMessage($data) {
     return "
     <html>
     <head>
         <style>
-            body { font-family: Arial, sans-serif; }
-            .container { padding: 20px; }
-            .field { margin: 10px 0; }
-            .label { font-weight: bold; }
+            body {
+                font-family: 'Arial', sans-serif;
+                margin: 0;
+                padding: 0;
+                background-color: #f5f5f5;
+            }
+            .container {
+                max-width: 600px;
+                margin: 20px auto;
+                background-color: #0D1C49;
+                border-radius: 10px;
+                overflow: hidden;
+                box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            }
+            .header {
+                background-color: #0D1C49;
+                color: gold;
+                padding: 20px;
+                text-align: center;
+                border-bottom: 2px solid gold;
+            }
+            .content {
+                padding: 20px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                background-color: #0D1C49;
+                color: gold;
+            }
+            th, td {
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid rgba(255,215,0,0.3);
+            }
+            th {
+                background-color: rgba(255,215,0,0.1);
+                font-weight: bold;
+            }
+            .footer {
+                text-align: center;
+                padding: 15px;
+                color: gold;
+                font-size: 12px;
+                border-top: 2px solid gold;
+            }
         </style>
     </head>
     <body>
         <div class='container'>
-            <h2>Nouvelle visite détectée</h2>
-            <div class='field'><span class='label'>IP:</span> {$data['ip']}</div>
-            <div class='field'><span class='label'>Pays:</span> {$data['country']}</div>
-            <div class='field'><span class='label'>Région:</span> {$data['region']}</div>
-            <div class='field'><span class='label'>Ville:</span> {$data['city']}</div>
-            <div class='field'><span class='label'>Position:</span> {$data['lat']}, {$data['lon']}</div>
-            <div class='field'><span class='label'>FAI:</span> {$data['isp']}</div>
-            <div class='field'><span class='label'>Navigateur:</span> {$data['ua']}</div>
-            <div class='field'><span class='label'>Date:</span> {$data['time']}</div>
+            <div class='header'>
+                <h1>🌟 HMB Tech Tracker 🌟</h1>
+                <p>Nouvelle visite détectée sur votre site</p>
+            </div>
+            <div class='content'>
+                <table>
+                    <tr>
+                        <th>Adresse IP</th>
+                        <td>{$data['ip']}</td>
+                    </tr>
+                    <tr>
+                        <th>Pays</th>
+                        <td>{$data['country']}</td>
+                    </tr>
+                    <tr>
+                        <th>Région</th>
+                        <td>{$data['region']}</td>
+                    </tr>
+                    <tr>
+                        <th>Ville</th>
+                        <td>{$data['city']}</td>
+                    </tr>
+                    <tr>
+                        <th>Latitude</th>
+                        <td>{$data['lat']}</td>
+                    </tr>
+                    <tr>
+                        <th>Longitude</th>
+                        <td>{$data['lon']}</td>
+                    </tr>
+                    <tr>
+                        <th>FAI</th>
+                        <td>{$data['isp']}</td>
+                    </tr>
+                    <tr>
+                        <th>Navigateur</th>
+                        <td>{$data['ua']}</td>
+                    </tr>
+                    <tr>
+                        <th>Date et Heure</th>
+                        <td>{$data['time']}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class='footer'>
+                © " . date('Y') . " HMB Tech - Système de Tracking
+            </div>
         </div>
     </body>
     </html>";
 }
 
 try {
-    // Lecture et validation des données
-    $input = json_decode(file_get_contents("php://input"), true);
+    // Lecture des données
+    $rawInput = file_get_contents("php://input");
+    $input = json_decode($rawInput, true);
     
-    if (!$input || !validateData($input)) {
-        throw new Exception('Données invalides ou incomplètes');
+    if (!$input) {
+        throw new Exception('Données JSON invalides');
     }
-
-    // Journalisation des visites (optionnel)
-    $logEntry = date('Y-m-d H:i:s') . " - IP: {$input['ip']} - Pays: {$input['country']}\n";
-    file_put_contents('visits.log', $logEntry, FILE_APPEND);
 
     // Configuration de PHPMailer
     $mail = new PHPMailer(true);
@@ -90,9 +156,13 @@ try {
     $mail->CharSet = 'UTF-8';
 
     // Contenu de l'email
-    $mail->Subject = 'Nouvelle visite sur HMB Tech';
+    $mail->Subject = '🌟 Nouvelle Visite - HMB Tech';
     $mail->Body = formatMessage($input);
-    $mail->AltBody = strip_tags(str_replace(['<br>', '</div>'], "\n", $mail->Body));
+    $mail->AltBody = "Nouvelle visite détectée\n\n" . 
+                     "IP: {$input['ip']}\n" .
+                     "Pays: {$input['country']}\n" .
+                     "Ville: {$input['city']}\n" .
+                     "Date: {$input['time']}";
 
     // Envoi de l'email
     $mail->send();
@@ -100,7 +170,7 @@ try {
     // Réponse au client
     echo json_encode([
         'status' => 'success',
-        'message' => 'Données de visite enregistrées'
+        'message' => 'Notification envoyée'
     ]);
 
 } catch (Exception $e) {
