@@ -105,7 +105,7 @@ $template = <<<XML
         <p>#HMBTECH #MadeInRDC #TechIsPower #HansMbayaLeBoss</p>
       ]]></description>
       <pubDate>{{PUB_DATE}}</pubDate>
-      <guid>http://hmb-tech-x.pages.dev/rss-{{GUID}}</guid>
+      <guid>http://hmb-tech-x.pages.dev/feed/rss.xml-{{GUID}}</guid>
     </item>
 
   </channel>
