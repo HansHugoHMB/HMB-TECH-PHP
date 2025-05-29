@@ -47,6 +47,7 @@ $template = <<<XML
     <description>Le flux officiel de HMB-TECH</description>
     <language>fr-FR</language>
     <lastBuildDate>{{PUB_DATE}}</lastBuildDate>
+    <atom:link href="https://hmb-tech-x.pages.dev/feed/rss.xml" rel="self" type="application/rss+xml" />
 
     <item>
       <title>🔥 HMB-TECH – Quand la tech rencontre le génie africain ⚡🌍</title>
