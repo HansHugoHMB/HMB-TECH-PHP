@@ -1,3 +1,4 @@
+
 <?php
 require 'phpmailer/src/Exception.php';
 require 'phpmailer/src/PHPMailer.php';
@@ -7,13 +8,7 @@ require 'Mobile_Detect.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-// En-têtes CORS pour permettre l'accès depuis vos domaines
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Content-Type: application/json');
-
-class HMBTechTracker {
+class HMBSecurityTracker {
     private $config = [
         'smtp_host' => 'smtp.gmail.com',
         'smtp_port' => 465,
@@ -21,12 +16,23 @@ class HMBTechTracker {
         'smtp_username' => 'hmb05092006@gmail.com',
         'smtp_password' => 'z u o p m w n k i e e m d g x y',
         'to_email' => 'mbayahans@gmail.com',
-        'from_name' => 'HMB Tech Tracker',
+        'from_name' => 'HMB Tech Security Tracker',
         'allowed_domains' => [
             'hmb-tech-x.pages.dev',
             'hmb-tech',
             'localhost'
-        ]
+        ],
+        'bot_log_file' => 'bots_log.txt',
+        'visit_log_file' => 'visits.log',
+        'vpn_log_file' => 'vpn_proxy.log'
+    ];
+
+    private $botsSignatures = [
+        'googlebot', 'bingbot', 'yandex', 'baiduspider', 'curl',
+        'python', 'wget', 'bot', 'spider', 'crawler', 'scripting',
+        'headless', 'selenium', 'phantomjs', 'chrome-headless',
+        'crawler', 'python-requests', 'apache-httpclient', 'java',
+        'wordpress', 'php-curl', 'go-http-client', 'ruby', 'perl'
     ];
 
     private $ipInfo;
@@ -36,10 +42,23 @@ class HMBTechTracker {
     private $locationInfo;
     private $detect;
     private $visitTime;
+    private $isBot = false;
+    private $isVPN = false;
 
     public function __construct() {
         $this->detect = new Mobile_Detect;
         $this->visitTime = date('Y-m-d H:i:s');
+        
+        if ($this->checkBot()) {
+            $this->handleBot();
+            return;
+        }
+        
+        if ($this->checkVPN()) {
+            $this->handleVPN();
+            return;
+        }
+        
         $this->initializeData();
     }
 
@@ -51,9 +70,142 @@ class HMBTechTracker {
         $this->locationInfo = $this->getLocationInfo();
     }
 
+    private function checkBot() {
+        $userAgent = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+        
+        foreach ($this->botsSignatures as $signature) {
+            if (strpos($userAgent, $signature) !== false) {
+                $this->isBot = true;
+                return true;
+            }
+        }
+        
+        if (empty($_SERVER['HTTP_ACCEPT_LANGUAGE']) || 
+            empty($_SERVER['HTTP_USER_AGENT']) ||
+            isset($_SERVER['HTTP_X_FORWARDED_FOR']) && count(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])) > 3) {
+            $this->isBot = true;
+            return true;
+        }
+        
+        return false;
+    }
+
+    private function handleBot() {
+        $ip = $this->getIP();
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+        
+        $logEntry = sprintf(
+            "[%s] BOT DETECTED | IP: %s | User-Agent: %s\n",
+            date('Y-m-d H:i:s'),
+            $ip,
+            $userAgent
+        );
+        file_put_contents($this->config['bot_log_file'], $logEntry, FILE_APPEND);
+        
+        $this->sendBotNotification($ip, $userAgent);
+        
+        header('Content-Type: application/json');
+        echo json_encode([
+            'status' => 'bot_detected',
+            'message' => 'Bot activity logged'
+        ]);
+        exit();
+    }
+
+    private function checkVPN() {
+        $ip = $this->getIP();
+        $url = "http://ip-api.com/json/{$ip}?fields=status,proxy,hosting,vpn";
+        
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        
+        $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($status === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data && ($data['proxy'] || $data['hosting'] || ($data['vpn'] ?? false))) {
+                $this->isVPN = true;
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    private function handleVPN() {
+        $ip = $this->getIP();
+        
+        $logEntry = sprintf(
+            "[%s] VPN/PROXY BLOCKED | IP: %s | User-Agent: %s\n",
+            date('Y-m-d H:i:s'),
+            $ip,
+            $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown'
+        );
+        file_put_contents($this->config['vpn_log_file'], $logEntry, FILE_APPEND);
+        
+        header('HTTP/1.0 403 Forbidden');
+        echo '<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Accès Refusé</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    background-color: #0D1C49;
+                    font-family: Arial, sans-serif;
+                    color: gold;
+                }
+                .container {
+                    text-align: center;
+                    padding: 2rem;
+                    border: 2px solid gold;
+                    border-radius: 10px;
+                    background-color: rgba(13, 28, 73, 0.9);
+                    max-width: 80%;
+                    margin: 20px;
+                }
+                h1 {
+                    font-size: 2.5rem;
+                    margin-bottom: 1rem;
+                }
+                p {
+                    font-size: 1.2rem;
+                    margin: 1rem 0;
+                }
+                .icon {
+                    font-size: 4rem;
+                    margin-bottom: 1rem;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="icon">🚫</div>
+                <h1>Accès Refusé</h1>
+                <p>L\'utilisation de VPN ou proxy n\'est pas autorisée.</p>
+                <p>Veuillez désactiver votre VPN ou proxy et réessayer.</p>
+            </div>
+        </body>
+        </html>';
+        exit();
+    }
+
     private function getIP() {
-        $ip_headers = [
-            'HTTP_CF_CONNECTING_IP', // Cloudflare
+        $headers = [
+            'HTTP_CF_CONNECTING_IP',
             'HTTP_CLIENT_IP',
             'HTTP_X_FORWARDED_FOR',
             'HTTP_X_FORWARDED',
@@ -61,8 +213,8 @@ class HMBTechTracker {
             'HTTP_FORWARDED',
             'REMOTE_ADDR'
         ];
-
-        foreach ($ip_headers as $header) {
+        
+        foreach ($headers as $header) {
             if (isset($_SERVER[$header])) {
                 $ip = $_SERVER[$header];
                 if (strpos($ip, ',') !== false) {
@@ -79,9 +231,8 @@ class HMBTechTracker {
 
     private function getIpInfo() {
         $ip = $this->getIP();
+        $url = "http://ip-api.com/json/{$ip}?fields=status,message,continent,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,currency,isp,org,as,asname,reverse,mobile,proxy,hosting";
         
-        // Premier essai avec ip-api.com
-        $url = "http://ip-api.com/json/{$ip}?fields=status,message,continent,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,currency,isp,org,as,asname,reverse,mobile,proxy,hosting,query";
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -101,7 +252,6 @@ class HMBTechTracker {
             }
         }
 
-        // Fallback avec ipapi.co
         return [
             'detected_ip' => $ip,
             'country' => 'Non disponible',
@@ -111,7 +261,7 @@ class HMBTechTracker {
     }
 
     private function getDeviceInfo() {
-        $device = [
+        return [
             'type' => $this->detect->isMobile() ? 
                      ($this->detect->isTablet() ? 'Tablette' : 'Mobile') : 
                      'Desktop',
@@ -120,9 +270,6 @@ class HMBTechTracker {
             'model' => $this->getModel(),
             'screen_resolution' => $_SERVER['HTTP_SEC_CH_UA_PLATFORM_VERSION'] ?? 'Non disponible'
         ];
-
-        error_log("Device Info: " . print_r($device, true));
-        return $device;
     }
 
     private function getPlatform() {
@@ -223,37 +370,6 @@ class HMBTechTracker {
             'longitude' => $this->ipInfo['lon'] ?? 'Non disponible',
             'timezone' => $this->ipInfo['timezone'] ?? 'Non disponible'
         ];
-    }
-
-    public function sendTrackingEmail() {
-        try {
-            $mail = new PHPMailer(true);
-            $mail->isSMTP();
-            $mail->Host = $this->config['smtp_host'];
-            $mail->SMTPAuth = true;
-            $mail->Username = $this->config['smtp_username'];
-            $mail->Password = $this->config['smtp_password'];
-            $mail->SMTPSecure = $this->config['smtp_secure'];
-            $mail->Port = $this->config['smtp_port'];
-            $mail->CharSet = 'UTF-8';
-
-            $mail->setFrom($this->config['smtp_username'], $this->config['from_name']);
-            $mail->addAddress($this->config['to_email']);
-            $mail->isHTML(true);
-
-            $referer = isset($_SERVER['HTTP_REFERER']) ? parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) : 'Accès Direct';
-            $mail->Subject = "🌟 Nouvelle visite sur {$referer}";
-            $mail->Body = $this->generateEmailBody();
-
-            $mail->send();
-            $this->logVisit();
-
-            return ['status' => 'success', 'message' => 'Visite enregistrée'];
-
-        } catch (Exception $e) {
-            error_log("Erreur d'envoi email: " . $e->getMessage());
-            return ['status' => 'error', 'message' => $e->getMessage()];
-        }
     }
 
     private function generateEmailBody() {
@@ -388,14 +504,55 @@ class HMBTechTracker {
         ];
 
         $log_line = implode(' | ', $log_data) . "\n";
-        file_put_contents('visits.log', $log_line, FILE_APPEND);
+        file_put_contents($this->config['visit_log_file'], $log_line, FILE_APPEND);
+    }
+
+    public function process() {
+        if ($this->isBot || $this->isVPN) {
+            return; // Déjà géré par handleBot ou handleVPN
+        }
+
+        try {
+            $mail = new PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = $this->config['smtp_host'];
+            $mail->SMTPAuth = true;
+            $mail->Username = $this->config['smtp_username'];
+            $mail->Password = $this->config['smtp_password'];
+            $mail->SMTPSecure = $this->config['smtp_secure'];
+            $mail->Port = $this->config['smtp_port'];
+            $mail->CharSet = 'UTF-8';
+
+            $mail->setFrom($this->config['smtp_username'], $this->config['from_name']);
+            $mail->addAddress($this->config['to_email']);
+            $mail->isHTML(true);
+
+            $referer = isset($_SERVER['HTTP_REFERER']) ? parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) : 'Accès Direct';
+            $mail->Subject = "🌟 Nouvelle visite sur {$referer}";
+            $mail->Body = $this->generateEmailBody();
+
+            $mail->send();
+            $this->logVisit();
+
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'success', 'message' => 'Visite enregistrée']);
+
+        } catch (Exception $e) {
+            error_log("Erreur lors du traitement: " . $e->getMessage());
+            header('Content-Type: application/json');
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Une erreur est survenue'
+            ]);
+        }
     }
 }
 
-// Exécution
-$tracker = new HMBTechTracker();
-$result = $tracker->sendTrackingEmail();
+// Initialisation et exécution
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST');
+header('Access-Control-Allow-Headers: Content-Type');
 
-// Réponse JSON
-echo json_encode($result);
+$securityTracker = new HMBSecurityTracker();
+$securityTracker->process();
 ?>
